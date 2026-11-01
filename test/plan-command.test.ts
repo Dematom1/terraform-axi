@@ -123,6 +123,19 @@ describe("plan --plan-json risk flags", () => {
     expect(String(report.error)).toContain(message);
   });
 
+  it("counts malformed show entries and refuses to trust their counts", () => {
+    const { status, report } = tfaxi([
+      "plan",
+      "--plan-json",
+      planFixture("malformed-show.json"),
+      "--expect",
+      "add=0",
+    ]);
+    expect(status).toBe(1);
+    expect(report).toMatchObject({ status: "incomplete", malformed_lines: 3, summary: "unavailable" });
+    expect(report.expect).toMatchObject({ status: "fail" });
+  });
+
   it("treats an errored plan document as incomplete", () => {
     const file = join(home, "errored.json");
     writeFileSync(file, JSON.stringify({ format_version: "1.2", planned_values: {}, errored: true }));
@@ -307,7 +320,14 @@ describe("plan <module> through the configured runner", () => {
 
 describe("scrub", () => {
   it("masks credential-like environment values only", () => {
-    const env = { AWS_SECRET_ACCESS_KEY: "abcdef123", B2_APPLICATION_KEY: "b2keyvalue", HOME: "/home/user" };
-    expect(scrub("x abcdef123 b2keyvalue /home/user", env)).toBe("x [redacted] [redacted] /home/user");
+    const env = {
+      AWS_SECRET_ACCESS_KEY: "abcdef123",
+      B2_APPLICATION_KEY: "b2keyvalue",
+      AWS_SESSION_TOKEN: "abc",
+      HOME: "/home/user",
+    };
+    expect(scrub("x abcdef123 b2keyvalue abc abcdef xabc /home/user", env)).toBe(
+      "x [redacted] [redacted] [redacted] abcdef xabc /home/user",
+    );
   });
 });

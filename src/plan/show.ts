@@ -43,21 +43,46 @@ function decodeResource(entry: unknown): PlanChange | undefined {
 /** Converts a `show -json` plan document into the same shape `parsePlanEvents` returns. */
 export function parseShowDocument(doc: Json): PlanEvents {
   const list = (value: unknown) => (Array.isArray(value) ? value : []);
-  const rows = (value: unknown) => list(value).flatMap((entry) => decodeResource(entry) ?? []);
+  let malformed = 0;
+  const rows = (value: unknown) => {
+    if (value !== undefined && !Array.isArray(value)) {
+      malformed++;
+      return [];
+    }
+    return list(value).flatMap((entry) => {
+      if (
+        !isRecord(entry) ||
+        !str(entry.address) ||
+        !isRecord(entry.change) ||
+        !Array.isArray(entry.change.actions)
+      ) {
+        malformed++;
+        return [];
+      }
+      return decodeResource(entry) ?? [];
+    });
+  };
   const changes = rows(doc.resource_changes);
-  const outputs: PlanOutput[] = Object.entries(isRecord(doc.output_changes) ? doc.output_changes : {}).flatMap(
-    ([name, change]) => {
-      if (!isRecord(change)) return [];
-      const { action, raw } = decodeAction(change);
-      const row: PlanOutput = {
-        name,
-        action,
-        sensitive: change.before_sensitive === true || change.after_sensitive === true,
-      };
-      if (raw !== undefined) row.raw = raw;
-      return [row];
-    },
-  );
+  const drift = rows(doc.resource_drift);
+  const outputChanges = doc.output_changes;
+  const outputs: PlanOutput[] = isRecord(outputChanges)
+    ? Object.entries(outputChanges).flatMap(([name, change]) => {
+        if (!isRecord(change) || !Array.isArray(change.actions)) {
+          malformed++;
+          return [];
+        }
+        const { action, raw } = decodeAction(change);
+        const row: PlanOutput = {
+          name,
+          action,
+          sensitive: change.before_sensitive === true || change.after_sensitive === true,
+        };
+        if (raw !== undefined) row.raw = raw;
+        return [row];
+      })
+    : outputChanges === undefined
+      ? []
+      : (malformed++, []);
   const tally = (...actions: string[]) => changes.filter((row) => actions.includes(row.action)).length;
   const imports = list(doc.resource_changes).filter(
     (entry) => isRecord(entry) && isRecord(entry.change) && entry.change.importing !== undefined,
@@ -66,7 +91,7 @@ export function parseShowDocument(doc: Json): PlanEvents {
   // (an empty plan omits `resource_changes`). An errored plan, or one with an action this decoder cannot
   // count, gets none rather than a guessed number.
   const summary =
-    doc.errored === true || changes.some((row) => row.action === "unknown")
+    doc.errored === true || malformed > 0 || changes.some((row) => row.action === "unknown")
       ? ("unavailable" as const)
       : {
           add: tally("create", "REPLACE"),
@@ -80,11 +105,11 @@ export function parseShowDocument(doc: Json): PlanEvents {
     flavor: "unknown",
     ...(version ? { version } : {}),
     changes,
-    drift: rows(doc.resource_drift),
+    drift,
     summary,
     outputs,
     diagnostics: [],
-    malformed: 0,
+    malformed,
     unknownEvents: 0,
   };
 }

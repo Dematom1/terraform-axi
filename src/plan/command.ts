@@ -24,8 +24,13 @@ const SECRET_ENV = /SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|_KEY|ACCESS_
 /** Masks values of credential-like environment variables in any text copied from Terraform output. */
 export function scrub(text: string, env: NodeJS.ProcessEnv = process.env): string {
   let result = text;
-  for (const [key, value] of Object.entries(env))
-    if (value && value.length >= 6 && SECRET_ENV.test(key)) result = result.split(value).join("[redacted]");
+  for (const [key, value] of Object.entries(env)) {
+    if (!value || !SECRET_ENV.test(key)) continue;
+    result =
+      value.length >= 6
+        ? result.split(value).join("[redacted]")
+        : result.replace(new RegExp(`\\b${value.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`, "g"), "[redacted]");
+  }
   return result;
 }
 const clip = (text: string) => (text.length > DETAIL_CHARS ? `${text.slice(0, DETAIL_CHARS)}…` : text);
