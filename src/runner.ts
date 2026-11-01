@@ -7,6 +7,19 @@ import type { Config } from "./config.js";
 
 const execute = promisify(execFile);
 const versionArgs = ["version", "-json"];
+const runEnv = () => ({ ...process.env, TF_IN_AUTOMATION: "1", TF_INPUT: "0", CHECKPOINT_DISABLE: "1" });
+function classify(error: unknown): "not found" | "not executable" | "timeout" | "failed" {
+  const record = error && typeof error === "object" ? error : {};
+  if ("code" in record && record.code === "ENOENT") return "not found";
+  if ("code" in record && record.code === "EACCES") return "not executable";
+  if (
+    ("code" in record && record.code === "ETIMEDOUT") ||
+    ("killed" in record && record.killed === true) ||
+    ("signal" in record && record.signal === "SIGKILL")
+  )
+    return "timeout";
+  return "failed";
+}
 const denied = new Set([
   "apply",
   "destroy",
@@ -56,33 +69,21 @@ async function resolveBinary(
   if (binary !== "auto") return { binary };
   let terraformError: unknown;
   try {
-    await execute("terraform", versionArgs, { timeout: 2_000, env: process.env });
+    assertAllowed(versionArgs);
+    await execute("terraform", versionArgs, { timeout: 2_000, killSignal: "SIGKILL", env: runEnv() });
     return { binary: "terraform" };
   } catch (error) {
     terraformError = error;
   }
   try {
-    await execute("tofu", versionArgs, { timeout: 2_000, env: process.env });
-    const code =
-      terraformError && typeof terraformError === "object" && "code" in terraformError ? terraformError.code : "failed";
-    return {
-      binary: "tofu",
-      fallbackReason: `Terraform probe failed: ${code === "ENOENT" ? "not found" : code === "EACCES" ? "not executable" : code === "ETIMEDOUT" ? "timeout" : "failed"}`,
-    };
+    assertAllowed(versionArgs);
+    await execute("tofu", versionArgs, { timeout: 2_000, killSignal: "SIGKILL", env: runEnv() });
+    return { binary: "tofu", fallbackReason: `Terraform probe failed: ${classify(terraformError)}` };
   } catch (error) {
-    const code = error && typeof error === "object" && "code" in error ? error.code : "failed";
-    const fallbackMissing = code === "ENOENT";
-    const terraformCode =
-      terraformError && typeof terraformError === "object" && "code" in terraformError ? terraformError.code : "failed";
-    const failure = fallbackMissing && terraformCode !== "ENOENT" ? terraformCode : code;
+    const tofuFailure = classify(error);
+    const terraformFailure = classify(terraformError);
     throw new CliError(
-      failure === "ENOENT"
-        ? "not found"
-        : failure === "EACCES"
-          ? "not executable"
-          : failure === "ETIMEDOUT"
-            ? "timeout"
-            : "failed",
+      tofuFailure === "not found" && terraformFailure !== "not found" ? terraformFailure : tofuFailure,
     );
   }
 }
@@ -113,18 +114,32 @@ export async function run(
     } else argv = versionArgs;
   }
   try {
+    assertAllowed(argv);
     const result = await execute(file, argv, {
       timeout: timeout ?? 10_000,
       killSignal: "SIGKILL",
       maxBuffer: 4 * 1024 * 1024,
-      env: { ...process.env, TF_IN_AUTOMATION: "1", TF_INPUT: "0", CHECKPOINT_DISABLE: "1" },
+      env: runEnv(),
     });
     return { ...result, ...(fallbackReason ? { fallbackReason } : {}) };
   } catch (error) {
-    const record = error && typeof error === "object" ? error : {};
-    const code = "code" in record ? String(record.code) : "failed";
-    const timedOut =
-      ("killed" in record && record.killed === true) || ("signal" in record && record.signal === "SIGKILL");
+    let failure = error;
+    if (!config.wrapper && config.binary === "auto" && file === "terraform") {
+      try {
+        assertAllowed(argv);
+        const result = await execute("tofu", argv, {
+          timeout: timeout ?? 10_000,
+          killSignal: "SIGKILL",
+          maxBuffer: 4 * 1024 * 1024,
+          env: runEnv(),
+        });
+        return { ...result, fallbackReason: `Terraform invocation failed: ${classify(error)}` };
+      } catch (tofuError) {
+        failure = tofuError;
+      }
+    }
+    const record = failure && typeof failure === "object" ? failure : {};
+    const category = classify(failure);
     const stdout = "stdout" in record && typeof record.stdout === "string" ? record.stdout : "";
     const diagnostics = stdout.split("\n").flatMap((line) => {
       try {
@@ -134,16 +149,6 @@ export async function run(
         return [];
       }
     });
-    throw new CliError(
-      code === "ENOENT"
-        ? "not found"
-        : code === "EACCES"
-          ? "not executable"
-          : code === "ETIMEDOUT" || timedOut
-            ? "timeout"
-            : "failed",
-      1,
-      diagnostics,
-    );
+    throw new CliError(category, 1, diagnostics);
   }
 }

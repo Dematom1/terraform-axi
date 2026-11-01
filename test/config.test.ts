@@ -15,6 +15,8 @@ describe("config storage", () => {
       expect(readFileSync(path, "utf8")).toBe("{not json");
       writeFileSync(path, '{"modules":null}');
       expect(() => readConfig(path)).toThrow("malformed config");
+      writeFileSync(path, '{"binary":["tofu"]}');
+      expect(() => readConfig(path)).toThrow("malformed config");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

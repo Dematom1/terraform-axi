@@ -274,6 +274,26 @@ printf '{"tofu_version":"1.2.3"}\\n'
     }
   });
 
+  it.each([
+    ["status", "typo"],
+    ["hooks", "--bogus"],
+    ["uninstall", "typo"],
+  ])("rejects extra setup arguments for %s before handling it", (action, extra) => {
+    const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [join(root, "dist", "bin", "terraform-axi.js"), "setup", action, extra],
+        { encoding: "utf8", env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") } },
+      );
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("VALIDATION_ERROR");
+      expect(existsSync(join(home, ".config", "terraform-axi", "config.json"))).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("reports an invalid saved modules value as malformed config", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");

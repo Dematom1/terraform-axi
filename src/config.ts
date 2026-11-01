@@ -24,7 +24,8 @@ export function readConfig(path: string): Config {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new CliError(`malformed config: ${path}`);
   const record = value as Record<string, unknown>;
   if (
-    (record.binary !== undefined && !["auto", "terraform", "tofu"].includes(String(record.binary))) ||
+    (record.binary !== undefined &&
+      (typeof record.binary !== "string" || !["auto", "terraform", "tofu"].includes(record.binary))) ||
     (record.modules !== undefined &&
       (!Array.isArray(record.modules) || !record.modules.every((item) => typeof item === "string"))) ||
     (record.wrapper !== undefined && typeof record.wrapper !== "string")

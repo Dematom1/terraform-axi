@@ -6,11 +6,17 @@ import { run, validateWrapper } from "../src/runner.js";
 import { CliError } from "../src/errors.js";
 
 let dir: string;
+let originalEnv: NodeJS.ProcessEnv;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "tfaxi-runner-"));
+  originalEnv = { ...process.env };
+  for (const key of Object.keys(process.env)) delete process.env[key];
+  Object.assign(process.env, { PATH: originalEnv.PATH ?? "", HOME: dir, XDG_CONFIG_HOME: join(dir, ".config") });
 });
 afterEach(() => {
   vi.unstubAllEnvs();
+  for (const key of Object.keys(process.env)) delete process.env[key];
+  Object.assign(process.env, originalEnv);
   rmSync(dir, { recursive: true, force: true });
 });
 function executable(body: string): string {
@@ -31,6 +37,22 @@ describe("runner seam", () => {
     expect(() => validateWrapper("just tf prefix{module}")).toThrow();
     expect(() => validateWrapper("just tf '{module}'")).toThrow();
     expect(() => validateWrapper("just tf \\\\{module}")).toThrow();
+  });
+  it("runs the fixture executable with named JSONL output and inherited env", async () => {
+    const callLog = join(dir, "calls.jsonl");
+    vi.stubEnv("TF_AXI_CALL_LOG", callLog);
+    vi.stubEnv("TF_AXI_FIXTURE", join(import.meta.dirname, "fixtures", "version.jsonl"));
+    vi.stubEnv("AWS_SECRET_ACCESS_KEY", "fixture-secret");
+    const fixture = join(import.meta.dirname, "fixtures", "fake-terraform.mjs");
+    const result = await run(config(`${process.execPath} ${fixture} {module}`), "module-a");
+    expect(JSON.parse(result.stdout)).toMatchObject({ terraform_version: "1.2.3" });
+    const invocation = JSON.parse(readFileSync(callLog, "utf8")) as {
+      argv: string[];
+      env: NodeJS.ProcessEnv;
+    };
+    expect(invocation.argv).toEqual(["module-a", "version", "-json"]);
+    expect(invocation.env.AWS_SECRET_ACCESS_KEY).toBe("fixture-secret");
+    expect(invocation.env.TF_IN_AUTOMATION).toBe("1");
   });
   it("keeps a wrapper module argument intact and passes the environment through", async () => {
     const log = join(dir, "argv.json");
@@ -75,6 +97,22 @@ describe("runner seam", () => {
     await expect(run({ binary: "auto", modules: [] }, "")).resolves.toMatchObject({
       stdout: "tofu-selected\n",
       fallbackReason: "Terraform probe failed: failed",
+    });
+  });
+  it("falls back to tofu when Terraform fails during the actual invocation", async () => {
+    const calls = join(dir, "terraform-calls");
+    writeFileSync(
+      join(dir, "terraform"),
+      `#!/bin/sh\ncount=0\n[ -f '${calls}' ] && read count < '${calls}'\ncount=$((count + 1))\nprintf '%s' "$count" > '${calls}'\n[ "$count" -eq 1 ] && printf '{"terraform_version":"1.0"}\\n' || exit 1\n`,
+      { mode: 0o700 },
+    );
+    writeFileSync(join(dir, "tofu"), "#!/bin/sh\nprintf 'tofu-selected\\n'\n", { mode: 0o700 });
+    chmodSync(join(dir, "terraform"), 0o700);
+    chmodSync(join(dir, "tofu"), 0o700);
+    vi.stubEnv("PATH", dir);
+    await expect(run({ binary: "auto", modules: [] }, "")).resolves.toMatchObject({
+      stdout: "tofu-selected\n",
+      fallbackReason: "Terraform invocation failed: failed",
     });
   });
   it("retains parsed diagnostics on version failures", async () => {

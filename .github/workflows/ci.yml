@@ -49,6 +49,7 @@ jobs:
       - run: npm ci
       - run: npm test
         env:
+          TF_AXI_REQUIRE_REAL_BINARIES: "1"
           AWS_ACCESS_KEY_ID: ""
           AWS_SECRET_ACCESS_KEY: ""
           GOOGLE_CREDENTIALS: ""

@@ -23,6 +23,13 @@ function config(): Config {
 function output(value: unknown): string {
   return encode(value);
 }
+function describeVersion(version: unknown): { flavor: "terraform" | "opentofu" | "unknown"; value: string } {
+  if (version && typeof version === "object") {
+    if ("terraform_version" in version) return { flavor: "terraform", value: String(version.terraform_version) };
+    if ("tofu_version" in version) return { flavor: "opentofu", value: String(version.tofu_version) };
+  }
+  return { flavor: "unknown", value: "version available" };
+}
 const hints = ["Run `terraform-axi setup` to configure Terraform/OpenTofu", "Run `terraform-axi --help` for commands"];
 const notImplemented = (command: string, args: string[]) => {
   if (args.length === 1 && args[0] === "--help")
@@ -41,6 +48,8 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
           "terraform-axi setup [--binary terraform|tofu|auto] [--wrapper command] [--module name] [--remove-module name]",
         help: hints,
       });
+    if (["status", "hooks", "uninstall"].includes(args[0] ?? "") && args.length !== 1)
+      throw new CliError("VALIDATION_ERROR: unexpected setup argument");
     if (args[0] === "status")
       return output({
         config: configPath,
@@ -106,43 +115,21 @@ async function home(): Promise<string> {
     try {
       const result = await run({ ...c, binary: binary as Config["binary"] }, "", 2_000);
       const version: unknown = JSON.parse(result.stdout);
-      versions[binary] =
-        version && typeof version === "object" && "terraform_version" in version
-          ? String(version.terraform_version)
-          : version && typeof version === "object" && "tofu_version" in version
-            ? String(version.tofu_version)
-            : "version available";
+      versions[binary] = describeVersion(version).value;
       if (binary === "tofu") tofuAvailable = true;
     } catch (error) {
       versions[binary] = error instanceof Error ? error.message : "probe failed";
       if (binary === "terraform") terraformFailed = true;
     }
   }
-  if (c.binary === "auto" && !c.wrapper && terraformFailed && tofuAvailable) {
-    try {
-      const { fallbackReason } = await run(c, "", 2_000);
-      if (fallbackReason) versions.tofu = `${versions.tofu ?? "version available"} (${fallbackReason})`;
-    } catch {
-      versions.tofu = `${versions.tofu} (fallback probe failed)`;
-    }
-  }
+  if (c.binary === "auto" && !c.wrapper && terraformFailed && tofuAvailable)
+    versions.tofu = `${versions.tofu} (Terraform probe failed: ${versions.terraform})`;
   if (c.wrapper && c.modules.length > 0) {
     try {
       validateWrapper(c.wrapper);
       const result = await run(c, c.modules[0]!, 2_000);
       const version: unknown = JSON.parse(result.stdout);
-      const flavor =
-        version && typeof version === "object" && "terraform_version" in version
-          ? "terraform"
-          : version && typeof version === "object" && "tofu_version" in version
-            ? "opentofu"
-            : "unknown";
-      const value =
-        version && typeof version === "object" && "terraform_version" in version
-          ? String(version.terraform_version)
-          : version && typeof version === "object" && "tofu_version" in version
-            ? String(version.tofu_version)
-            : "version available";
+      const { flavor, value } = describeVersion(version);
       versions.wrapper = `${c.binary === "auto" ? `wrapper-selected/${flavor}` : c.binary} ${value}`;
     } catch (error) {
       versions.wrapper =

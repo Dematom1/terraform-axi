@@ -4,31 +4,46 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
+import { run } from "../src/runner.js";
 import { realModule } from "./helpers.js";
 
 const root = join(import.meta.dirname, "..");
 const installed = (binary: string) => {
   try {
-    execFileSync(binary, ["version"], { stdio: "ignore", timeout: 2_000 });
+    execFileSync(binary, ["version"], {
+      stdio: "ignore",
+      timeout: 2_000,
+      env: { PATH: process.env.PATH ?? "", HOME: tmpdir(), XDG_CONFIG_HOME: tmpdir() },
+    });
     return true;
   } catch {
     return false;
   }
 };
-const binaries = ["terraform", "tofu"].filter(installed);
+const binaries = (["terraform", "tofu"] as const).filter(installed);
+const requireAll = process.env.TF_AXI_REQUIRE_REAL_BINARIES === "1";
 
 describe("real Terraform and OpenTofu", () => {
-  it.skipIf(binaries.length === 0)("reports installed binaries and initializes isolated local modules", () => {
+  it.runIf(requireAll)("finds both binaries on PATH", () => {
+    expect(binaries).toEqual(["terraform", "tofu"]);
+  });
+  it.skipIf(binaries.length === 0)("reports installed binaries and initializes isolated local modules", async () => {
     const home = mkdtempSync(join(tmpdir(), "tfaxi-real-"));
     const moduleDirs: string[] = [];
     const env = { PATH: process.env.PATH ?? "", HOME: home, XDG_CONFIG_HOME: join(home, ".config") };
+    const originalEnv = { ...process.env };
+    for (const key of Object.keys(process.env)) delete process.env[key];
+    Object.assign(process.env, env);
     try {
       const output = spawnSync(process.execPath, [join(root, "dist/bin/terraform-axi.js")], { encoding: "utf8", env });
       expect(output.status).toBe(0);
       expect(() => decode(output.stdout, { strict: true })).not.toThrow();
       for (const binary of binaries) {
         expect(output.stdout).toContain(`${binary}:`);
-        moduleDirs.push(realModule({}, binary));
+        const directory = realModule({}, binary);
+        moduleDirs.push(directory);
+        const result = await run({ binary, modules: [] }, directory);
+        expect(() => JSON.parse(result.stdout)).not.toThrow();
       }
       const setup = spawnSync(
         process.execPath,
@@ -44,6 +59,8 @@ describe("real Terraform and OpenTofu", () => {
     } finally {
       for (const directory of moduleDirs) rmSync(directory, { recursive: true, force: true });
       rmSync(home, { recursive: true, force: true });
+      for (const key of Object.keys(process.env)) delete process.env[key];
+      Object.assign(process.env, originalEnv);
     }
   });
 });
