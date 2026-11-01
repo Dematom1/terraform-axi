@@ -141,6 +141,12 @@ export function parsePlanEvents(jsonl: string): PlanEvents {
       }
       case "planned_change":
       case "resource_drift": {
+        const change = isRecord(event.change) ? event.change : undefined;
+        const resource = change && isRecord(change.resource) ? change.resource : undefined;
+        if (!resource || !str(resource.addr)) {
+          result.malformed++;
+          break;
+        }
         const row = decodeChange(event);
         if (row) (event.type === "planned_change" ? result.changes : result.drift).push(row);
         break;
@@ -149,9 +155,15 @@ export function parsePlanEvents(jsonl: string): PlanEvents {
         result.summary = decodeSummary(event.changes);
         break;
       case "outputs":
-        if (!isRecord(event.outputs)) break;
+        if (!isRecord(event.outputs)) {
+          result.malformed++;
+          break;
+        }
         for (const [name, output] of Object.entries(event.outputs)) {
-          if (!isRecord(output)) continue;
+          if (!isRecord(output)) {
+            result.malformed++;
+            continue;
+          }
           const { action, raw } = decodeAction(isRecord(output.change) ? output.change : output);
           const row: PlanOutput = { name, action, sensitive: output.sensitive === true };
           if (raw !== undefined) row.raw = raw;

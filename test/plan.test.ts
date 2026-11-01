@@ -164,6 +164,24 @@ describe("action decoding", () => {
     expect(classifyRisks(events).map((row) => row.flags)).toEqual([["unknown"], ["secret"]]);
   });
 
+  it.each([
+    { type: "planned_change", change: { resource: {}, action: "create" } },
+    { type: "resource_drift", change: { resource: {}, action: "delete" } },
+    { type: "outputs", outputs: { token: null } },
+  ])("marks malformed recognized events incomplete: %j", (event) => {
+    const events = parsePlanEvents(
+      [JSON.stringify(event), JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } })].join("\n"),
+    );
+    expect(events.malformed).toBe(1);
+    expect(evaluateExpect(parseExpect("add=0"), events).status).toBe("fail");
+  });
+
+  it("keeps legitimate no-op changes non-malformed", () => {
+    const events = planned({ resource, action: "noop" });
+    expect(events.changes).toEqual([]);
+    expect(events.malformed).toBe(0);
+  });
+
   it("bounds the kept raw value", () => {
     const raw = planned({ resource, action: "x".repeat(500) }).changes[0]?.raw;
     expect(raw).toHaveLength(65);

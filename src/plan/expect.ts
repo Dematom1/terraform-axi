@@ -45,7 +45,7 @@ const describe = (row: PlanChange) =>
 /** Compares expected counts with the stream's `change_summary`. A missing summary fails, never counts as 0. */
 export function evaluateExpect(expected: ExpectedCounts, events: PlanEvents): ExpectResult {
   const { summary } = events;
-  if (summary === "unavailable")
+  if (summary === "unavailable" || events.malformed > 0)
     return { status: "fail", reasons: ["planned counts unavailable: the plan has no complete change summary"] };
   const reasons: string[] = [];
   for (const key of KEYS as ExpectKey[]) {
