@@ -64,7 +64,10 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
   doctor: async (args) => notImplemented("doctor", args),
   state: async (args) =>
     args.length === 1 && args[0] === "--help"
-      ? output({ usage: "terraform-axi state list <module> | state resource <module> <address> [--full]", help: hints })
+      ? output({
+          usage: "terraform-axi state list <module> [--full] | state resource <module> <address> [--full]",
+          help: hints,
+        })
       : stateCommand(config(), args),
   setup: async (args) => {
     if (args.length === 1 && args[0] === "--help")

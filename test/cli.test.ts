@@ -127,7 +127,7 @@ describe("terraform-axi scaffold", () => {
       encoding: "utf8",
     });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("state list <module> | state resource <module> <address> [--full]");
+    expect(result.stdout).toContain("state list <module> [--full] | state resource <module> <address> [--full]");
     expect(result.stdout).not.toContain("NOT_IMPLEMENTED");
   });
 
