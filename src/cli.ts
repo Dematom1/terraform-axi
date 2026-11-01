@@ -7,7 +7,7 @@ import {
 } from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
 import { homedir } from "node:os";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION } from "./version.js";
@@ -41,7 +41,6 @@ function readClaudeSettings(): Record<string, unknown> {
 function writeClaudeSettings(settings: Record<string, unknown>): void {
   mkdirSync(dirname(claudeSettingsPath), { recursive: true, mode: 0o700 });
   writeFileSync(claudeSettingsPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(claudeSettingsPath, 0o600);
 }
 function sessionEndStatus(settings: Record<string, unknown>): "installed" | "missing" | "stale" {
   const hooks = settings.hooks;
