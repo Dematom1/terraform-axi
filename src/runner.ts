@@ -44,7 +44,7 @@ const deniedState = new Set(["pull", "push", "rm", "mv", "replace-provider", "id
 const deniedWorkspace = new Set(["new", "select", "delete"]);
 export function assertAllowed(args: string[]): void {
   if (
-    args.some((arg) => denied.has(arg) || arg.startsWith("-out=")) ||
+    args.some((arg) => denied.has(arg) || arg === "-out" || arg.startsWith("-out=")) ||
     (args[0] === "state" && args.some((arg) => deniedState.has(arg))) ||
     (args[0] === "workspace" && args.some((arg) => deniedWorkspace.has(arg))) ||
     (args[0] === "show" && args.length > 1)

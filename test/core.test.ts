@@ -65,6 +65,7 @@ describe("core boundaries", () => {
       ["logout"],
       ["test"],
       ["plan", "-out=x"],
+      ["plan", "-out", "x"],
       ["show", "saved.tfplan"],
     ])
       expect(() => assertAllowed(args)).toThrow(CliError);
