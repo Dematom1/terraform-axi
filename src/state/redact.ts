@@ -32,6 +32,7 @@ const SECRET_TYPES = [
 ];
 const REDACTED = "[redacted]";
 type Redaction = { value: unknown; count: number };
+type PathStep = string | number;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -64,8 +65,38 @@ function redact(value: unknown, sensitivity: unknown, force: boolean): Redaction
   return { value, count: 0 };
 }
 
+function sensitivePath(raw: unknown): PathStep[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const path: PathStep[] = [];
+  for (const rawStep of raw) {
+    if (!isObject(rawStep)) return undefined;
+    if (rawStep.type === "get_attr" && typeof rawStep.value === "string") path.push(rawStep.value);
+    else if (rawStep.type === "index") {
+      const index = isObject(rawStep.value) ? rawStep.value.value : rawStep.value;
+      if (typeof index !== "string" && typeof index !== "number") return undefined;
+      path.push(index);
+    } else return undefined;
+  }
+  return path;
+}
+function redactPath(value: unknown, path: PathStep[]): Redaction {
+  if (path.length === 0) return { value: REDACTED, count: 1 };
+  const [step, ...remaining] = path;
+  if (typeof step === "number" && Array.isArray(value) && step >= 0 && step < value.length) {
+    const result = redactPath(value[step], remaining);
+    const output = [...value];
+    output[step] = result.value;
+    return { value: output, count: result.count };
+  }
+  if (typeof step === "string" && isObject(value) && Object.hasOwn(value, step)) {
+    const result = redactPath(value[step], remaining);
+    return { value: { ...value, [step]: result.value }, count: result.count };
+  }
+  return { value, count: 0 };
+}
+
 export type RedactedState = {
-  resources: (StateDetail & { attributes: Record<string, unknown> })[];
+  resources: (Pick<StateDetail, "address" | "type" | "provider"> & { attributes: Record<string, unknown> })[];
   outputs: StateModel["outputs"];
   redacted: number;
 };
@@ -87,7 +118,16 @@ export function redactState(state: StateModel): RedactedState {
       attributes[key] = result.value;
       redacted += result.count;
     }
-    return { ...detail, attributes };
+    if (Array.isArray(detail.sensitiveAttributes)) {
+      for (const rawPath of detail.sensitiveAttributes) {
+        const path = sensitivePath(rawPath);
+        if (!path) continue;
+        const result = redactPath(attributes, path);
+        Object.assign(attributes, isObject(result.value) ? result.value : attributes);
+        redacted += result.count;
+      }
+    }
+    return { address: detail.address, type: detail.type, provider: detail.provider, attributes };
   });
   return { resources, outputs: state.outputs, redacted };
 }

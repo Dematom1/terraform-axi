@@ -18,10 +18,28 @@ const fixture = {
                 id: "id-1",
                 input: "hunter2",
                 password_note: "also secret",
-                credentials: { username: "u", value: "credential-secret" },
+                credentials: {
+                  username: "must-hide-user",
+                  value: "credential-secret",
+                  private_payload: ["must-hide-array"],
+                },
                 nested: [{ token_value: "list-secret" }],
+                items: [
+                  {
+                    payload: { text: "path-secret" },
+                    credentials: { username: "list-secret-user", secret_note: "list-secret-note" },
+                  },
+                  { payload: "not-marked" },
+                ],
               },
               sensitive_values: { input: true, nested: [{ token_value: true }] },
+              sensitive_attributes: [
+                [
+                  { type: "get_attr", value: "items" },
+                  { type: "index", value: { value: 0, type: ["number"] } },
+                  { type: "get_attr", value: "payload" },
+                ],
+              ],
             },
           ],
         },
@@ -91,7 +109,19 @@ describe("state model and redaction", () => {
     expect(state.resources[2]?.module).toBe("module.child");
     const redacted = redactState(state);
     const serialized = JSON.stringify(redacted);
-    for (const secret of ["hunter2", "also secret", "credential-secret", "list-secret", "secret-value", "child-secret"])
+    for (const secret of [
+      "hunter2",
+      "also secret",
+      "credential-secret",
+      "list-secret",
+      "secret-value",
+      "child-secret",
+      "must-hide-user",
+      "must-hide-array",
+      "path-secret",
+      "list-secret-user",
+      "list-secret-note",
+    ])
       expect(serialized).not.toContain(secret);
     expect(redacted.outputs).toEqual([
       { name: "pw", sensitive: true },

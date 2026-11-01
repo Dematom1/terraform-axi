@@ -5,6 +5,7 @@ export type StateDetail = {
   provider: string;
   attributes: Record<string, unknown>;
   sensitiveValues: unknown;
+  sensitiveAttributes: unknown;
 };
 export type StateModel = {
   resources: StateResource[];
@@ -52,6 +53,7 @@ export function parseState(json: string): StateModel {
             provider: typeof value.provider_name === "string" ? value.provider_name : "",
             attributes: record(instance.attributes) ?? {},
             sensitiveValues: instance.sensitive_values ?? {},
+            sensitiveAttributes: instance.sensitive_attributes ?? [],
           });
         }
         if (instances.length === 0) resources.push({ address, type, mode, module: moduleAddress });
