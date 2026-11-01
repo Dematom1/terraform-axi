@@ -13,6 +13,7 @@ import { VERSION } from "./version.js";
 import { parseArgs } from "./args.js";
 import { readConfig, writeConfig, type Config } from "./config.js";
 import { run, validateWrapper } from "./runner.js";
+import { CliError } from "./errors.js";
 
 const name = "terraform-axi";
 const configPath = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), name, "config.json");
@@ -23,17 +24,19 @@ function output(value: unknown): string {
   return encode(value);
 }
 const hints = ["Run `terraform-axi setup` to configure Terraform/OpenTofu", "Run `terraform-axi --help` for commands"];
-const notImplemented = () => {
-  throw new Error("NOT_IMPLEMENTED: command is not implemented in scaffold");
+const notImplemented = (command: string, args: string[]) => {
+  if (args.length === 1 && args[0] === "--help")
+    return output({ usage: `terraform-axi ${command} <module>`, status: "not implemented" });
+  throw new CliError("NOT_IMPLEMENTED: command is not implemented in scaffold");
 };
 const commands: Record<string, AxiCliCommand<undefined>> = {
-  plan: async () => notImplemented(),
-  drift: async () => notImplemented(),
-  doctor: async () => notImplemented(),
-  state: async () => notImplemented(),
+  plan: async (args) => notImplemented("plan", args),
+  drift: async (args) => notImplemented("drift", args),
+  doctor: async (args) => notImplemented("doctor", args),
+  state: async (args) => notImplemented("state", args),
   update: async (args) => {
     if (args.length === 1 && args[0] === "--help") return output({ usage: "terraform-axi update", help: hints });
-    return notImplemented();
+    return notImplemented("update", args);
   },
   setup: async (args) => {
     if (args.length === 1 && args[0] === "--help")
@@ -149,13 +152,17 @@ export async function main(
     version: VERSION,
     argv,
     stdout,
-    topLevelHelp: help,
+    topLevelHelp: output({
+      usage: "terraform-axi <command> [args]",
+      commands: ["home", "plan", "drift", "doctor", "state", "setup", "update"],
+      help,
+    }),
     commands,
     home: async () => home(),
     resolveContext: () => undefined,
     formatError: (error) => ({
       output: output({ error: error instanceof Error ? error.message : String(error), help: hints }),
-      exitCode: 1,
+      exitCode: error instanceof CliError ? error.exitCode : 1,
     }),
   });
 }
