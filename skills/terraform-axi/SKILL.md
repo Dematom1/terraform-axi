@@ -1,6 +1,6 @@
 ---
 name: terraform-axi
-description: Read-only Terraform and OpenTofu CLI; state list and resource inspection are implemented.
+description: Read-only Terraform and OpenTofu CLI; state list infers resource types by default, while --full reads state JSON to resolve them.
 ---
 
 # terraform-axi
