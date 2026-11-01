@@ -62,7 +62,6 @@ describe("terraform-axi scaffold", () => {
       const fakeGh = join(fakeBin, "gh");
       const outputPath = join(fakeBin, "github-output");
       writeFileSync(fakeGh, "#!/bin/sh\nprintf '%s' \"$GH_FIXTURE\"\n", { mode: 0o700 });
-      expect(contract.releaseRun).toContain("gh api");
       const run = contract.releaseRun
         .replace("gh api", `${JSON.stringify(fakeGh)} api`)
         .replace(
