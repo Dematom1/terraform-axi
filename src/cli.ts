@@ -23,7 +23,11 @@ const claudeSettingsPath = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(),
 const cliUrl = fileURLToPath(import.meta.url);
 const cliDir = dirname(cliUrl);
 const sessionEndPath = join(cliDir, "..", cliUrl.endsWith(".ts") ? "dist/bin" : "bin", "terraform-axi-session-end.js");
-const sessionEndCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(sessionEndPath)} # ${name}-session-end`;
+const sessionEndMarker = ` # ${name}-session-end`;
+const sessionEndCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(sessionEndPath)}${sessionEndMarker}`;
+function isManagedSessionEnd(command: string): boolean {
+  return command.endsWith(sessionEndMarker);
+}
 function readClaudeSettings(): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(readFileSync(claudeSettingsPath, "utf8"));
@@ -45,7 +49,7 @@ function sessionEndStatus(settings: Record<string, unknown>): "installed" | "mis
   const groups = (hooks as Record<string, unknown>).SessionEnd;
   if (groups === undefined) return "missing";
   if (!Array.isArray(groups)) return "stale";
-  const managed = groups.flatMap((group) => group && typeof group === "object" && Array.isArray((group as Record<string, unknown>).hooks) ? (group as { hooks: unknown[] }).hooks : []).filter((hook) => hook && typeof hook === "object" && typeof (hook as Record<string, unknown>).command === "string" && ((hook as Record<string, unknown>).command as string).includes(`${name}-session-end`)) as Array<Record<string, unknown>>;
+  const managed = groups.flatMap((group) => group && typeof group === "object" && Array.isArray((group as Record<string, unknown>).hooks) ? (group as { hooks: unknown[] }).hooks : []).filter((hook) => hook && typeof hook === "object" && typeof (hook as Record<string, unknown>).command === "string" && isManagedSessionEnd((hook as Record<string, unknown>).command as string)) as Array<Record<string, unknown>>;
   return managed.some((hook) => hook.command === sessionEndCommand) ? "installed" : managed.length ? "stale" : "missing";
 }
 function updateSessionEnd(settings: Record<string, unknown>, remove: boolean): void {
@@ -55,7 +59,7 @@ function updateSessionEnd(settings: Record<string, unknown>, remove: boolean): v
   const groups = (existing ?? []) as Array<Record<string, unknown>>;
   const retained = groups.map((group) => {
     if (!group || typeof group !== "object" || !Array.isArray(group.hooks)) return group;
-    return { ...group, hooks: group.hooks.filter((hook) => !hook || typeof hook !== "object" || !String((hook as Record<string, unknown>).command ?? "").includes(`${name}-session-end`)) };
+    return { ...group, hooks: group.hooks.filter((hook) => !hook || typeof hook !== "object" || !isManagedSessionEnd(String((hook as Record<string, unknown>).command ?? ""))) };
   }).filter((group) => !group || typeof group !== "object" || !Array.isArray(group.hooks) || group.hooks.length);
   if (!remove) retained.push({ matcher: "", hooks: [{ type: "command", command: sessionEndCommand, timeout: 10 }] });
   if (retained.length) hooks.SessionEnd = retained; else delete hooks.SessionEnd;
