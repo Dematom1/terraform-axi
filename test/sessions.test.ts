@@ -37,7 +37,8 @@ describe("session memory", () => {
     const session = lastSession(path);
     expect(session?.commands).toEqual({ plan: 1, state: 1 });
     expect(session?.modules).toEqual({ "infra/prod": 1 });
-    expect(JSON.parse(readFileSync(path, "utf8"))).not.toHaveProperty("sessions[0].args");
+    const persisted = JSON.parse(readFileSync(path, "utf8"));
+    expect(persisted.sessions[0]).not.toHaveProperty("args");
   });
 
   it("keeps simultaneous session records separate", () => {
