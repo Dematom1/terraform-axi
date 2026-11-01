@@ -1,6 +1,6 @@
 ---
 name: terraform-axi
-description: Read-only Terraform and OpenTofu CLI; plan risk summaries, --expect count assertions, drift detection, and state inspection.
+description: Read-only Terraform and OpenTofu CLI; state list and resource inspection are implemented.
 ---
 
 # terraform-axi
