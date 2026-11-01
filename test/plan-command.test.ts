@@ -313,7 +313,10 @@ describe("plan <module> through the configured runner", () => {
     withFakeWrapper();
     const secret = "stdout-secret-value";
     const fixture = join(home, "stdout.jsonl");
-    writeFileSync(fixture, `backend ${secret} failed\\n${JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } })}\\n`);
+    writeFileSync(
+      fixture,
+      `backend ${secret} failed\n${JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } })}\n`,
+    );
     const { status, report, stdout } = tfaxi(["plan", "m"], {
       TF_AXI_FIXTURE: fixture,
       TF_AXI_EXIT_CODE: "1",
