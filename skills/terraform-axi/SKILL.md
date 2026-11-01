@@ -1,6 +1,6 @@
 ---
 name: terraform-axi
-description: Read-only Terraform and OpenTofu CLI scaffold; plan, drift, doctor, and state commands are planned but not implemented.
+description: Read-only Terraform and OpenTofu CLI; plan risk summaries and --expect count assertions. Drift, doctor, and state commands are planned.
 ---
 
 # terraform-axi
@@ -11,16 +11,18 @@ See the [README command reference](https://github.com/Dematom1/terraform-axi#com
 
 ## Commands
 
-| Command                                                                                     | Purpose                                                               |
-| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `terraform-axi`                                                                             | Configured modules, wrapper, detected executable versions, and hints  |
-| `terraform-axi plan <module>`                                                               | Planned change-risk summary (planned; not implemented)                |
-| `terraform-axi plan <module> --expect add=N,change=N,destroy=N`                             | Assert planned counts (planned; not implemented)                      |
-| `terraform-axi drift <module>`                                                              | Drift summary (planned; not implemented)                              |
-| `terraform-axi doctor <module>`                                                             | Backend and credential diagnostics (planned; not implemented)         |
-| `terraform-axi state list <module>` / `state resource <address>`                            | State inspection with secrets redacted (planned; not implemented)     |
-| `terraform-axi setup [--binary ...] [--wrapper ...] [--module name] [--remove-module name]` | Configure binary, wrapper, and registered modules                     |
-| `terraform-axi setup status`                                                                | Inspect current settings and managed hooks                            |
-| `terraform-axi setup hooks` / `setup uninstall`                                             | Install or remove terraform-axi-managed user-level SessionStart hooks |
+| Command                                                                                     | Purpose                                                                                                                |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `terraform-axi`                                                                             | Configured modules, wrapper, detected executable versions, and hints                                                   |
+| `terraform-axi plan <module>`                                                               | Per-resource create/update/REPLACE/DESTROY/read rows; flags destroys, replacements, IAM, and secret-touching resources |
+| `terraform-axi plan <module> --expect add=N,change=N,destroy=N`                             | Assert planned counts (any subset); exits 1 with reasons on mismatch                                                   |
+| `terraform-axi plan <module> [--binary terraform\|tofu] [--timeout seconds] [--full]`       | Run the binary directly instead of the wrapper, cap the plan time (default 1800s), or list every low-risk row          |
+| `terraform-axi plan --plan-json <file>`                                                     | Same summary from a saved `show -json <planfile>` document or `plan -json` stream                                      |
+| `terraform-axi drift <module>`                                                              | Drift summary (planned; not implemented)                                                                               |
+| `terraform-axi doctor <module>`                                                             | Backend and credential diagnostics (planned; not implemented)                                                          |
+| `terraform-axi state list <module>` / `state resource <address>`                            | State inspection with secrets redacted (planned; not implemented)                                                      |
+| `terraform-axi setup [--binary ...] [--wrapper ...] [--module name] [--remove-module name]` | Configure binary, wrapper, and registered modules                                                                      |
+| `terraform-axi setup status`                                                                | Inspect current settings and managed hooks                                                                             |
+| `terraform-axi setup hooks` / `setup uninstall`                                             | Install or remove terraform-axi-managed user-level SessionStart hooks                                                  |
 
 See [VISION.md](../../VISION.md) for product boundaries and [CONTRIBUTING.md](https://github.com/Dematom1/terraform-axi/blob/main/CONTRIBUTING.md) before contributing.

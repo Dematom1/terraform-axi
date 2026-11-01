@@ -90,7 +90,7 @@ describe.each([
     ]);
     expect(evaluateExpect(parseExpect("add=0"), events)).toEqual({
       status: "fail",
-      reasons: ["planned counts unavailable: the plan stream has no change_summary"],
+      reasons: ["planned counts unavailable: the plan has no complete change summary"],
     });
   });
 
@@ -164,6 +164,27 @@ describe("action decoding", () => {
     expect(classifyRisks(events).map((row) => row.flags)).toEqual([["unknown"], ["secret"]]);
   });
 
+  it.each([
+    { type: "planned_change", change: { resource: {}, action: "create" } },
+    { type: "resource_drift", change: { resource: {}, action: "delete" } },
+    { type: "outputs", outputs: { token: null } },
+  ])("marks malformed recognized events incomplete: %j", (event) => {
+    const events = parsePlanEvents(
+      [
+        JSON.stringify(event),
+        JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } }),
+      ].join("\n"),
+    );
+    expect(events.malformed).toBe(1);
+    expect(evaluateExpect(parseExpect("add=0"), events).status).toBe("fail");
+  });
+
+  it("keeps legitimate no-op changes non-malformed", () => {
+    const events = planned({ resource, action: "noop" });
+    expect(events.changes).toEqual([]);
+    expect(events.malformed).toBe(0);
+  });
+
   it("bounds the kept raw value", () => {
     const raw = planned({ resource, action: "x".repeat(500) }).changes[0]?.raw;
     expect(raw).toHaveLength(65);
@@ -192,6 +213,17 @@ describe("action decoding", () => {
 });
 
 describe("outputs", () => {
+  it("makes counts unavailable for an unrecognized output action", () => {
+    const events = parsePlanEvents(
+      [
+        JSON.stringify({ type: "outputs", outputs: { token: { change: { actions: ["future-action"] } } } }),
+        JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } }),
+      ].join("\n"),
+    );
+    expect(events.summary).toBe("unavailable");
+    expect(evaluateExpect(parseExpect("add=0"), events).status).toBe("fail");
+  });
+
   // F1: a sensitive output with a singular string action is a secret change.
   it.each([
     [{ action: "update" }, "update"],

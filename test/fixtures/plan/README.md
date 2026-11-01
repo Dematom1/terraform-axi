@@ -22,3 +22,20 @@ Facts these captures pin:
 - Streaming events carry a singular `change.action` and `change.reason`. The plural `actions` array belongs to `show -json` documents.
 - `remove` in a stream means forget (stop managing, do not destroy). Neither binary counts it in the summary's `remove` (destroy) count.
 - A replace counts toward both add and destroy, matching Terraform's own "N to add, N to destroy" summary.
+
+## `show -json` documents
+
+`*-show.json` are `show -json <planfile>` documents for `plan --plan-json`. Re-capture them with:
+
+```sh
+test/fixtures/plan/capture-show.sh terraform terraform-1.15.8
+test/fixtures/plan/capture-show.sh tofu tofu-1.13.1
+```
+
+The script writes the prior state by hand instead of applying, plans once with `-out` inside a throwaway `mktemp` directory, and deletes that directory with the plan file. The `SENTINEL` output values let tests assert that sensitive values never reach output. Facts these captures pin:
+
+- An import-only resource is `actions: ["no-op"]` with `change.importing`, and a move-only resource is `no-op` with `previous_address`.
+- Replace reasons are spelled `replace_because_cannot_update` (the stream says `cannot_update`).
+- A plan with no resource changes omits `resource_changes` entirely.
+
+`risk-flags-show.json` is hand-written: it covers IAM, secret, destroy, and replace flags on provider types the captures cannot create, plus an unrecognized action.

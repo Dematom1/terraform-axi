@@ -1,0 +1,82 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.8",
+  "planned_values": {},
+  "resource_changes": [
+    {
+      "address": "aws_iam_role.deploy",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "change": { "actions": ["create"], "before": null, "after": { "name": "deploy" } }
+    },
+    {
+      "address": "aws_secretsmanager_secret_version.db",
+      "mode": "managed",
+      "type": "aws_secretsmanager_secret_version",
+      "change": {
+        "actions": ["update"],
+        "before": { "secret_string": "before-SENTINEL" },
+        "after": { "secret_string": "after-SENTINEL" },
+        "before_sensitive": { "secret_string": true },
+        "after_sensitive": { "secret_string": true }
+      }
+    },
+    {
+      "address": "aws_s3_bucket.logs",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "action_reason": "delete_because_no_resource_config",
+      "change": { "actions": ["delete"], "before": { "bucket": "logs" }, "after": null }
+    },
+    {
+      "address": "aws_instance.web",
+      "mode": "managed",
+      "type": "aws_instance",
+      "action_reason": "replace_because_tainted",
+      "change": { "actions": ["create", "delete"], "before": { "ami": "a" }, "after": { "ami": "a" } }
+    },
+    {
+      "address": "aws_iam_policy.ro",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "change": { "actions": ["delete"], "before": { "policy": "{}" }, "after": null }
+    },
+    {
+      "address": "data.aws_iam_policy_document.ro",
+      "mode": "data",
+      "type": "aws_iam_policy_document",
+      "change": { "actions": ["read"], "before": null, "after": {} }
+    },
+    {
+      "address": "aws_s3_bucket.unchanged",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "change": { "actions": ["no-op"], "before": {}, "after": {} }
+    },
+    {
+      "address": "future_thing.x",
+      "mode": "managed",
+      "type": "future_thing",
+      "change": { "actions": ["teleport"], "before": {}, "after": {} }
+    }
+  ],
+  "resource_drift": [
+    {
+      "address": "aws_s3_bucket.logs",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "change": { "actions": ["update"], "before": {}, "after": {} }
+    }
+  ],
+  "output_changes": {
+    "db_password": {
+      "actions": ["create"],
+      "before": null,
+      "after": "out-SENTINEL",
+      "before_sensitive": false,
+      "after_sensitive": true
+    },
+    "region": { "actions": ["no-op"], "before": "x", "after": "x", "before_sensitive": false, "after_sensitive": false }
+  },
+  "errored": false
+}
