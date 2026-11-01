@@ -35,7 +35,14 @@ describe("terraform-axi scaffold", () => {
       packageArtifact: true,
       matchingDownload: true,
       buildStepOrder: true,
-      publishSteps: ["Validate manual publish ref", "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020", "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333", "run", "Skip if version already exists", "Stage package for approval"],
+      publishSteps: [
+        "Validate manual publish ref",
+        "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+        "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+        "run",
+        "Skip if version already exists",
+        "Stage package for approval",
+      ],
     });
   });
 
@@ -179,7 +186,9 @@ describe("terraform-axi scaffold", () => {
     mkdirSync(configDir, { recursive: true });
     const marker = join(home, "executed");
     const wrapper = join(home, "wrapper");
-    writeFileSync(wrapper, `#!/bin/sh\ntouch "${marker}"\nprintf '{"terraform_version":"9.9.9"}\\n'\n`, { mode: 0o700 });
+    writeFileSync(wrapper, `#!/bin/sh\ntouch "${marker}"\nprintf '{"terraform_version":"9.9.9"}\\n'\n`, {
+      mode: 0o700,
+    });
     writeFileSync(join(configDir, "config.json"), JSON.stringify({ binary: "auto", modules: ["module-a"], wrapper }));
     try {
       const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
