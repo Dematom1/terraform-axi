@@ -11,9 +11,10 @@ try {
     const value = saved as Record<string, unknown>;
     config = {
       binary: value.binary === "terraform" || value.binary === "tofu" ? value.binary : "auto",
-      modules: Array.isArray(value.modules) && value.modules.every((module) => typeof module === "string")
-        ? value.modules
-        : [],
+      modules:
+        Array.isArray(value.modules) && value.modules.every((module) => typeof module === "string")
+          ? value.modules
+          : [],
     };
   }
 } catch {
