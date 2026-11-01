@@ -112,12 +112,15 @@ export async function run(
   try {
     return await execute(file, argv, {
       timeout: timeout ?? (operation === "version" ? 10_000 : 600_000),
+      killSignal: "SIGKILL",
       maxBuffer: 4 * 1024 * 1024,
       env: { ...process.env, TF_IN_AUTOMATION: "1", TF_INPUT: "0", CHECKPOINT_DISABLE: "1" },
     });
   } catch (error) {
     const record = error && typeof error === "object" ? error : {};
     const code = "code" in record ? String(record.code) : "failed";
+    const timedOut =
+      ("killed" in record && record.killed === true) || ("signal" in record && record.signal === "SIGKILL");
     const stdout = "stdout" in record && typeof record.stdout === "string" ? record.stdout : "";
     const stderr = "stderr" in record && typeof record.stderr === "string" ? record.stderr : "";
     if (code === "2" && (operation === "plan" || operation === "plan_refresh_only")) return { stdout, stderr };
@@ -134,7 +137,7 @@ export async function run(
         ? "not found"
         : code === "EACCES"
           ? "not executable"
-          : code === "ETIMEDOUT"
+          : code === "ETIMEDOUT" || timedOut
             ? "timeout"
             : "failed",
       1,

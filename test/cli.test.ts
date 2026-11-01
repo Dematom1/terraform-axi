@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -236,6 +236,16 @@ describe("terraform-axi scaffold", () => {
       });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("malformed config");
+      const setup = spawnSync(
+        process.execPath,
+        [join(root, "dist", "bin", "terraform-axi.js"), "setup", "--binary", "tofu"],
+        {
+          encoding: "utf8",
+          env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
+        },
+      );
+      expect(setup.status).toBe(1);
+      expect(readFileSync(join(configDir, "config.json"), "utf8")).toBe('{"modules":null}');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
