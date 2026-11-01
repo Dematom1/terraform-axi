@@ -62,7 +62,11 @@ export function recordSession(input: unknown, path = dataPath()): void {
     catch (error) {
       if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") throw error;
       try {
-        if (Date.now() - statSync(lock).mtimeMs > 30_000) unlinkSync(lock);
+        const observed = statSync(lock);
+        if (Date.now() - observed.mtimeMs > 30_000) {
+          const current = statSync(lock);
+          if (current.dev === observed.dev && current.ino === observed.ino) unlinkSync(lock);
+        }
       } catch { /* Lock disappeared. */ }
       if (existsSync(lock)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
     }
