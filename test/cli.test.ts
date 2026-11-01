@@ -122,16 +122,15 @@ describe("terraform-axi scaffold", () => {
     }
   });
 
-  it("fails with NOT_IMPLEMENTED when state is not implemented", () => {
+  it("shows the implemented state commands in help", () => {
     const result = spawnSync(
       process.execPath,
-      [join(root, "dist", "bin", "terraform-axi.js"), "state", "test-module"],
-      {
-        encoding: "utf8",
-      },
+      [join(root, "dist", "bin", "terraform-axi.js"), "state", "--help"],
+      { encoding: "utf8" },
     );
-    expect(result.status).toBe(1);
-    expect(result.stdout).toContain("NOT_IMPLEMENTED");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("state list <module> | state resource <module> <address> [--full]");
+    expect(result.stdout).not.toContain("NOT_IMPLEMENTED");
   });
 
   it("reports an unprobed wrapper without a module or suggested command", () => {
