@@ -29,7 +29,8 @@ function record(input: unknown): Session | undefined {
         if (typeof command !== "string") continue;
         for (const match of command.matchAll(/(?:^|[;&|]\s*)terraform-axi\s+(plan|drift|state|doctor)\s+([^\s;&|]+)/g)) {
           commands[match[1]!] = (commands[match[1]!] ?? 0) + 1;
-          modules[match[2]!] = (modules[match[2]!] ?? 0) + 1;
+          if (!/(?:sk|pk|rk)_(?:live|test)_[\w-]+|AKIA[A-Z0-9]{16}|(?:token|secret|password|api[_-]?key)[=:_-]/i.test(match[2]!))
+            modules[match[2]!] = (modules[match[2]!] ?? 0) + 1;
         }
       }
     }
