@@ -43,7 +43,7 @@ jobs:
           RELEASE_APP_BOT_LOGIN: ${{ vars.RELEASE_APP_BOT_LOGIN }}
         run: |
           commits=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/commits" --jq '.[] | [.author.login // "MISSING", .committer.login // "MISSING", (.commit.verification.verified // false | tostring)] | @tsv')
-          bot_only=$(printf '%s\n' "$commits" | node trusted/scripts/release-bot-only.mjs)
+          bot_only=$(printf '%s\n' "$commits" | node scripts/release-bot-only.mjs)
           echo "bot_only=$bot_only" >> "$GITHUB_OUTPUT"
 
       - name: Check PR does not modify release-please-generated files
