@@ -147,7 +147,7 @@ async function home(): Promise<string> {
   return output({
     modules: c.modules.length ? c.modules : "none configured",
     ...(session ? { last_session: session } : {}),
-    next_action: module ? `terraform-axi plan ${module}` : "terraform-axi setup --module <name-or-path>",
+    next_action: module ? `terraform-axi setup status` : "terraform-axi setup --module <name-or-path>",
     binary: c.binary,
     wrapper: c.wrapper ?? "none",
     versions,
@@ -172,7 +172,6 @@ export async function main(
   argv = process.argv.slice(2),
   stdout: { write: (chunk: string) => unknown } = process.stdout,
 ): Promise<void> {
-  record(argv);
   if (argv.length === 2 && argv[0] === "update" && argv[1] === "--help") {
     stdout.write(output({ usage: "terraform-axi update", help: hints }));
     return;
@@ -195,5 +194,6 @@ export async function main(
       exitCode: error instanceof CliError ? error.exitCode : 1,
     }),
   });
+  record(argv);
 }
 if (import.meta.url === `file://${process.argv[1]}`) void main();

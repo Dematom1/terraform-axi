@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
-import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readSync, renameSync, statSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readSync, readdirSync, renameSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 export type Entry = { s: string | null; cmd: string; module: string | null; t: number };
 export type LastSession = { commands: Record<string, number>; modules: Record<string, number>; ended_at: string };
@@ -26,8 +26,7 @@ export function recordInvocation(cmd: string, module: string | null, path = sess
   try {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     try {
-      // Concurrent rotations may drop the older generation; that only loses old memory.
-      if (statSync(path).size > MAX_BYTES) renameSync(path, `${path}.1`);
+      if (statSync(path).size > MAX_BYTES) renameSync(path, `${path}.${randomUUID()}`);
     } catch {
       /* no file yet, or another process rotated it first */
     }
@@ -70,19 +69,23 @@ function readTail(path: string): Entry[] {
 
 /** Summarizes the most recent session other than `current`, from the tails of the log and its rotated generation. */
 export function lastSession(current = sessionKey(), path = sessionsPath()): LastSession | undefined {
-  for (const entries of [readTail(path), readTail(`${path}.1`)]) {
-    const target = [...entries].reverse().find((entry) => entry.s !== null && entry.s !== current)?.s;
-    if (!target) continue;
-    const session: LastSession = { commands: {}, modules: {}, ended_at: "" };
-    let ended = 0;
-    for (const entry of entries) {
-      if (entry.s !== target) continue;
-      session.commands[entry.cmd] = (session.commands[entry.cmd] ?? 0) + 1;
-      if (entry.module) session.modules[entry.module] = (session.modules[entry.module] ?? 0) + 1;
-      ended = Math.max(ended, entry.t);
-    }
-    session.ended_at = new Date(ended * 1000).toISOString();
-    return session;
+  let generations = [path];
+  try {
+    generations = [path, ...readdirSync(dirname(path)).filter((file) => file.startsWith(`${basename(path)}.`)).map((file) => join(dirname(path), file))];
+  } catch {
+    /* missing log directory */
   }
-  return undefined;
+  const entries = generations.flatMap(readTail);
+  const target = [...entries].sort((a, b) => b.t - a.t).find((entry) => entry.s !== null && entry.s !== current)?.s;
+  if (!target) return undefined;
+  const session: LastSession = { commands: {}, modules: {}, ended_at: "" };
+  let ended = 0;
+  for (const entry of entries) {
+    if (entry.s !== target) continue;
+    session.commands[entry.cmd] = (session.commands[entry.cmd] ?? 0) + 1;
+    if (entry.module) session.modules[entry.module] = (session.modules[entry.module] ?? 0) + 1;
+    ended = Math.max(ended, entry.t);
+  }
+  session.ended_at = new Date(ended * 1000).toISOString();
+  return session;
 }
