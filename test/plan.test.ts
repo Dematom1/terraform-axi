@@ -37,8 +37,6 @@ describe.each([
   });
 
   it("reads the summary and tolerates flavor-specific keys", () => {
-    const raw = fixture(`${flavor}-${version}-changes`);
-    expect(raw).toContain(flavor === "tofu" ? '"forget":1' : '"action_invocation":0');
     // A forget is not a destroy: Terraform and OpenTofu both leave it out of `remove`.
     expect(load("changes").summary).toEqual({
       add: 4,
@@ -223,7 +221,9 @@ describe("change_summary", () => {
   const summary = (changes: object) => parsePlanEvents(JSON.stringify({ type: "change_summary", changes })).summary;
 
   it("keeps safe non-negative integer counts", () => {
-    expect(summary({ add: 1, change: 2, remove: 3, import: 0, action_invocation: 0, operation: "plan" })).toEqual({
+    expect(
+      summary({ add: 1, change: 2, remove: 3, import: 0, action_invocation: 3, future_key: 9, operation: "plan" }),
+    ).toEqual({
       add: 1,
       change: 2,
       destroy: 3,
