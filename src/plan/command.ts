@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { CliError, ReportError, UsageError } from "../errors.js";
@@ -32,29 +31,12 @@ export function scrub(text: string, env: NodeJS.ProcessEnv = process.env): strin
 const clip = (text: string) => (text.length > DETAIL_CHARS ? `${text.slice(0, DETAIL_CHARS)}…` : text);
 const shellWord = (word: string) => (/^[\w./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`);
 
-/** The command a human would run to apply. terraform-axi only prints it. */
-function applyCommand(config: Config, module: string, events: PlanEvents): string {
-  if (config.wrapper)
-    return [
-      ...config.wrapper
-        .trim()
-        .split(/\s+/)
-        .map((w) => (w === "{module}" ? module : w)),
-      "apply",
-    ]
-      .map(shellWord)
-      .join(" ");
-  const binary = events.flavor !== "unknown" ? events.flavor : config.binary === "auto" ? "terraform" : config.binary;
-  return [binary, `-chdir=${resolve(module)}`, "apply"].map(shellWord).join(" ");
-}
-
 export function renderPlan(
   events: PlanEvents,
   options: {
     source: Record<string, string>;
     expected?: ExpectedCounts;
     full?: boolean;
-    apply?: string;
     module?: string;
   },
 ): { report: Record<string, unknown>; ok: boolean } {
@@ -104,8 +86,6 @@ export function renderPlan(
   if (high.length) help.push("Review high-risk rows (destroy, replace, iam, secret, unknown) before anyone applies");
   if (shownLow.length < low.length && options.module)
     help.push(`Run \`terraform-axi plan ${shellWord(options.module)} --full\` to list every change`);
-  if (options.apply && risks.length && !errors.length)
-    help.push(`terraform-axi never applies; a human may run: \`${options.apply}\``);
   if (!complete && !errors.length)
     help.push("The plan output is incomplete; rerun the plan before trusting these rows");
   if (!options.expected && !errors.length && complete)
@@ -118,7 +98,6 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
   const { module, planJson, expected, full, binary, timeout } = parsePlanArgs(args);
   let events: PlanEvents;
   let source: Record<string, string>;
-  let apply: string | undefined;
   let stderr = "";
   let exitCode = 0;
   if (planJson) {
@@ -146,7 +125,6 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
     source = { module: module! };
     if (runConfig.wrapper) source.via = "wrapper";
     if (result.fallbackReason) source.note = result.fallbackReason;
-    apply = applyCommand(runConfig, module!, events);
     stderr = result.stderr;
     exitCode = result.exitCode;
   }
@@ -154,7 +132,6 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
     source,
     full,
     ...(expected ? { expected } : {}),
-    ...(apply ? { apply } : {}),
     ...(module ? { module } : {}),
   });
   const { report } = rendered;

@@ -103,7 +103,7 @@ describe.each(binaries)("plan with real %s on a throwaway local-backend module",
       "terraform_data.keep": "update",
       "terraform_data.new": "create",
     });
-    expect(report.help).toContain(`terraform-axi never applies; a human may run: \`${flavor} -chdir=${module} apply\``);
+    expect(JSON.stringify(report.help ?? [])).not.toContain("apply");
     expect(stdout).not.toContain("SENTINEL");
     // No plan file, no state write, no lock left behind.
     expect(readdirSync(module).sort()).toEqual(before.files);
@@ -129,7 +129,7 @@ describe.each(binaries)("plan with real %s on a throwaway local-backend module",
     const { status, report } = tfaxi(["plan", module, "--expect", "add=2,change=1,destroy=2"]);
     expect(status).toBe(0);
     expect(report).toMatchObject({ via: "wrapper", expect: { status: "pass" } });
-    expect(report.help).toContain(`terraform-axi never applies; a human may run: \`${wrapper} ${module} apply\``);
+    expect(JSON.stringify(report.help ?? [])).not.toContain("apply");
     expect(readdirSync(module).sort()).toEqual(before.files);
     expect(sha(join(module, "terraform.tfstate"))).toBe(before.state);
   });

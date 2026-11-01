@@ -177,10 +177,7 @@ describe("plan <module> through the configured runner", () => {
     expect(call!.argv).toEqual(["infra/prod", ...PLAN_ARGS]);
     expect(Object.keys(call!.env).filter((key) => key.startsWith("TF_CLI_ARGS"))).toEqual([]);
     expect(existsSync(join(home, "leak.tfplan"))).toBe(false);
-    // The apply command is printed for a human with the wrapper, never run.
-    expect(report.help).toContain(
-      `terraform-axi never applies; a human may run: \`${process.execPath} ${fake} infra/prod apply\``,
-    );
+    expect(JSON.stringify(report.help ?? [])).not.toContain("apply");
   });
 
   it("fails --expect with reasons naming the contributing resources", () => {
@@ -251,7 +248,7 @@ describe("plan <module> through the configured runner", () => {
     expect(report.via).toBeUndefined();
     expect(report.version).toBe("tofu 1.13.1");
     expect(readFileSync(log, "utf8").trim().split("\n").at(-1)).toBe(`-chdir=${home} ${PLAN_ARGS.join(" ")}`);
-    expect(report.help).toContain(`terraform-axi never applies; a human may run: \`tofu -chdir=${home} apply\``);
+    expect(JSON.stringify(report.help ?? [])).not.toContain("apply");
   });
 
   it("kills a plan that outlives --timeout", () => {
