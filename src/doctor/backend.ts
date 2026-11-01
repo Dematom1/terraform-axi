@@ -31,9 +31,14 @@ function maskSyntax(source: string): string {
       chars[i] = " ";
     } else if (source[i] === "#" || source.startsWith("//", i) || source.startsWith("/*", i)) {
       const newline = source.indexOf("\n", i);
-      const end = source[i] === "#" || source.startsWith("//", i)
-        ? (newline < 0 ? source.length : newline)
-        : (source.indexOf("*/", i + 2) < 0 ? source.length : source.indexOf("*/", i + 2) + 2);
+      const end =
+        source[i] === "#" || source.startsWith("//", i)
+          ? newline < 0
+            ? source.length
+            : newline
+          : source.indexOf("*/", i + 2) < 0
+            ? source.length
+            : source.indexOf("*/", i + 2) + 2;
       for (; i < end; i++) if (source[i] !== "\n") chars[i] = " ";
       i--;
     }
@@ -54,9 +59,14 @@ function maskComments(source: string): string {
       quoted = true;
     } else if (source[i] === "#" || source.startsWith("//", i) || source.startsWith("/*", i)) {
       const newline = source.indexOf("\n", i);
-      const end = source[i] === "#" || source.startsWith("//", i)
-        ? (newline < 0 ? source.length : newline)
-        : (source.indexOf("*/", i + 2) < 0 ? source.length : source.indexOf("*/", i + 2) + 2);
+      const end =
+        source[i] === "#" || source.startsWith("//", i)
+          ? newline < 0
+            ? source.length
+            : newline
+          : source.indexOf("*/", i + 2) < 0
+            ? source.length
+            : source.indexOf("*/", i + 2) + 2;
       for (; i < end; i++) if (source[i] !== "\n") chars[i] = " ";
       i--;
     }
@@ -114,7 +124,14 @@ export function inspectBackend(module: string): Backend | undefined {
   const values = maskComments(body);
   const value = (name: string) => values.match(new RegExp(`\\b${name}\\s*=\\s*"((?:\\\\.|[^"\\\\])*)"`))?.[1];
   const flags: Backend["flags"] = {};
-  for (const name of ["skip_credentials_validation", "skip_region_validation", "skip_requesting_account_id", "skip_metadata_api_check", "skip_s3_checksum", "use_path_style"] as const)
+  for (const name of [
+    "skip_credentials_validation",
+    "skip_region_validation",
+    "skip_requesting_account_id",
+    "skip_metadata_api_check",
+    "skip_s3_checksum",
+    "use_path_style",
+  ] as const)
     flags[name] = new RegExp(`\\b${name}\\s*=\\s*true\\b`).test(maskSyntax(body));
   const endpoint = value("endpoint");
   let endpointHost: string | undefined;

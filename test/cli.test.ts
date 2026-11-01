@@ -138,7 +138,11 @@ describe("terraform-axi scaffold", () => {
     const result = spawnSync(
       process.execPath,
       [join(root, "dist", "bin", "terraform-axi.js"), "doctor", "--explain", "-"],
-      { input: diagnostic, encoding: "utf8", env: { ...process.env, AWS_ACCESS_KEY_ID: "", AWS_SECRET_ACCESS_KEY: "" } },
+      {
+        input: diagnostic,
+        encoding: "utf8",
+        env: { ...process.env, AWS_ACCESS_KEY_ID: "", AWS_SECRET_ACCESS_KEY: "" },
+      },
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(expected);

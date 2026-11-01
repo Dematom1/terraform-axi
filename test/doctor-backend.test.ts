@@ -31,14 +31,20 @@ describe("static backend inspection", () => {
   it("keeps metadata offsets correct after non-BMP text", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
-    writeFileSync(join(directory, "main.tf"), '# 😀\nterraform { backend "s3" { endpoint = "https://s3.example.com" region = "us-east-1" } }');
+    writeFileSync(
+      join(directory, "main.tf"),
+      '# 😀\nterraform { backend "s3" { endpoint = "https://s3.example.com" region = "us-east-1" } }',
+    );
     expect(inspectBackend(directory)).toMatchObject({ endpointHost: "s3.example.com", region: "us-east-1" });
   });
 
   it("does not extract commented endpoint or region values", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
-    writeFileSync(join(directory, "main.tf"), `terraform { backend "s3" {\n # endpoint = "https://s3.example.com"\n // region = "us-east-1"\n } }`);
+    writeFileSync(
+      join(directory, "main.tf"),
+      `terraform { backend "s3" {\n # endpoint = "https://s3.example.com"\n // region = "us-east-1"\n } }`,
+    );
     expect(inspectBackend(directory)).toMatchObject({ type: "s3" });
     expect(inspectBackend(directory)).not.toHaveProperty("endpointHost");
     expect(inspectBackend(directory)).not.toHaveProperty("region");
@@ -67,29 +73,41 @@ describe("static backend inspection", () => {
   it("recognizes a backend after a string ending in an escaped backslash", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
-    writeFileSync(join(directory, "main.tf"), String.raw`resource "terraform_data" "x" { input = "ends\\" }
-terraform { backend "s3" { region = "us-east-1" } }`);
+    writeFileSync(
+      join(directory, "main.tf"),
+      String.raw`resource "terraform_data" "x" { input = "ends\\" }
+terraform { backend "s3" { region = "us-east-1" } }`,
+    );
     expect(inspectBackend(directory)).toMatchObject({ type: "s3", region: "us-east-1" });
   });
 
   it("ignores backend syntax inside heredocs", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
-    writeFileSync(join(directory, "main.tf"), `resource "terraform_data" "x" {\n input = <<EOF\nterraform { backend "s3" { region = "x" } }\nEOF\n}`);
+    writeFileSync(
+      join(directory, "main.tf"),
+      `resource "terraform_data" "x" {\n input = <<EOF\nterraform { backend "s3" { region = "x" } }\nEOF\n}`,
+    );
     expect(inspectBackend(directory)).toBeUndefined();
   });
 
   it("resumes structural scanning after an indented heredoc terminator", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
-    writeFileSync(join(directory, "main.tf"), `resource "terraform_data" "x" {\n input = <<-EOF\nterraform { backend "gcs" {} }\n EOF\n}\nterraform { backend "s3" { region = "us-east-1" } }`);
+    writeFileSync(
+      join(directory, "main.tf"),
+      `resource "terraform_data" "x" {\n input = <<-EOF\nterraform { backend "gcs" {} }\n EOF\n}\nterraform { backend "s3" { region = "us-east-1" } }`,
+    );
     expect(inspectBackend(directory)).toMatchObject({ type: "s3", region: "us-east-1" });
   });
 
   it("extracts fields when backend follows another terraform block", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
-    writeFileSync(join(directory, "main.tf"), 'terraform { required_version = ">= 1.0" backend "s3" { endpoint = "https://s3.example.com" region = "us-east-1" } }');
+    writeFileSync(
+      join(directory, "main.tf"),
+      'terraform { required_version = ">= 1.0" backend "s3" { endpoint = "https://s3.example.com" region = "us-east-1" } }',
+    );
     expect(inspectBackend(directory)).toMatchObject({ endpointHost: "s3.example.com", region: "us-east-1" });
   });
 
