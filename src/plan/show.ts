@@ -50,12 +50,7 @@ export function parseShowDocument(doc: Json): PlanEvents {
       return [];
     }
     return list(value).flatMap((entry) => {
-      if (
-        !isRecord(entry) ||
-        !str(entry.address) ||
-        !isRecord(entry.change) ||
-        !Array.isArray(entry.change.actions)
-      ) {
+      if (!isRecord(entry) || !str(entry.address) || !isRecord(entry.change) || !Array.isArray(entry.change.actions)) {
         malformed++;
         return [];
       }

@@ -188,8 +188,7 @@ export function parsePlanArgs(args: string[]): {
   const timeout = timeoutText === undefined ? DEFAULT_TIMEOUT_SECONDS : Number(timeoutText);
   if (!/^\d+$/.test(timeoutText ?? "1") || !Number.isSafeInteger(timeout) || timeout < 1)
     throw new UsageError(`--timeout must be a whole number of seconds, got ${timeoutText}`);
-  if (timeout > MAX_TIMEOUT_SECONDS)
-    throw new UsageError(`--timeout must not exceed ${MAX_TIMEOUT_SECONDS} seconds`);
+  if (timeout > MAX_TIMEOUT_SECONDS) throw new UsageError(`--timeout must not exceed ${MAX_TIMEOUT_SECONDS} seconds`);
   let expected: ExpectedCounts | undefined;
   const spec = parsed.values["--expect"]?.[0];
   if (spec !== undefined) {

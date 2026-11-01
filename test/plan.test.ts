@@ -170,7 +170,10 @@ describe("action decoding", () => {
     { type: "outputs", outputs: { token: null } },
   ])("marks malformed recognized events incomplete: %j", (event) => {
     const events = parsePlanEvents(
-      [JSON.stringify(event), JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } })].join("\n"),
+      [
+        JSON.stringify(event),
+        JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } }),
+      ].join("\n"),
     );
     expect(events.malformed).toBe(1);
     expect(evaluateExpect(parseExpect("add=0"), events).status).toBe("fail");

@@ -150,13 +150,7 @@ describe("plan --plan-json risk flags", () => {
   });
 
   it("counts malformed show entries and refuses to trust their counts", () => {
-    const { status, report } = tfaxi([
-      "plan",
-      "--plan-json",
-      planFixture("malformed-show.json"),
-      "--expect",
-      "add=0",
-    ]);
+    const { status, report } = tfaxi(["plan", "--plan-json", planFixture("malformed-show.json"), "--expect", "add=0"]);
     expect(status).toBe(1);
     expect(report).toMatchObject({ status: "incomplete", malformed_lines: 3, summary: "unavailable" });
     expect(report.expect).toMatchObject({ status: "fail" });
