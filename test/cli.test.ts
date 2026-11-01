@@ -14,6 +14,25 @@ describe("terraform-axi scaffold", () => {
     expect(chunks.join("")).toContain("not implemented in scaffold");
   });
 
+  it("probes versions through the configured wrapper", () => {
+    const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
+    const configDir = join(home, ".config", "terraform-axi");
+    mkdirSync(configDir, { recursive: true });
+    const wrapper = join(home, "wrapper");
+    writeFileSync(wrapper, '#!/bin/sh\nprintf \'{"terraform_version":"9.9.9"}\\n\'\n', { mode: 0o700 });
+    writeFileSync(join(configDir, "config.json"), JSON.stringify({ binary: "auto", modules: [], wrapper }));
+    try {
+      const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
+        encoding: "utf8",
+        env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
+      });
+      expect(output).toContain("terraform: 9.9.9");
+      expect(output).not.toContain("tofu:");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("ignores an invalid saved modules value in the built CLI", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");
