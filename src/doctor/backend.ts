@@ -16,9 +16,12 @@ function maskSyntax(source: string): string {
     } else if (source.startsWith("<<", i)) {
       const marker = /^<<-?([A-Za-z_]\w*)/.exec(source.slice(i));
       if (marker) {
-        const start = source.indexOf("\n", i);
-        const terminator = start < 0 ? -1 : source.indexOf(`\n${marker[1]}`, start);
-        const end = terminator < 0 ? source.length : source.indexOf("\n", terminator + 1) < 0 ? source.length : source.indexOf("\n", terminator + 1);
+        const lineEnd = source.indexOf("\n", i);
+        const bodyStart = lineEnd < 0 ? source.length : lineEnd + 1;
+        const terminator = new RegExp(`^${marker[1]}[\\t ]*\\r?$`, "m");
+        const indentedTerminator = new RegExp(`^[\\t ]*${marker[1]}[\\t ]*\\r?$`, "m");
+        const found = (marker[0].startsWith("<<-") ? indentedTerminator : terminator).exec(source.slice(bodyStart));
+        const end = found ? bodyStart + found.index + found[0].length : source.length;
         for (let j = i; j < end; j++) if (source[j] !== "\n") chars[j] = " ";
         i = end - 1;
       }
