@@ -33,7 +33,7 @@ function readClaudeSettings(): Record<string, unknown> {
 }
 function writeClaudeSettings(settings: Record<string, unknown>): void {
   mkdirSync(dirname(claudeSettingsPath), { recursive: true, mode: 0o700 });
-  writeFileSync(claudeSettingsPath, `${JSON.stringify(settings, null, 2)}\\n`, { mode: 0o600 });
+  writeFileSync(claudeSettingsPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
   chmodSync(claudeSettingsPath, 0o600);
 }
 function sessionEndStatus(settings: Record<string, unknown>): "installed" | "missing" | "stale" {
