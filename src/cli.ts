@@ -148,7 +148,10 @@ async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};
   if (c.wrapper && c.modules.length === 0) {
-    versions.wrapper = "via wrapper: not probed; no exact check command is available without a configured module";
+    const checkCommand = c.wrapper.includes("{module}")
+      ? c.wrapper.replace("{module}", "<module>")
+      : `${c.wrapper} <module>`;
+    versions.wrapper = `via wrapper: not probed; check with: ${checkCommand} version -json`;
   }
   const binaries = c.wrapper ? [] : c.binary === "auto" ? ["terraform", "tofu"] : [c.binary];
   for (const binary of binaries) {
