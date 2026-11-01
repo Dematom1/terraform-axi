@@ -1,4 +1,4 @@
-export type PlanAction = "create" | "update" | "REPLACE" | "DESTROY" | "read" | "move" | "import" | "forget";
+export type PlanAction = "create" | "update" | "REPLACE" | "DESTROY" | "read" | "move" | "import" | "forget" | (string & {});
 export type PlanChange = { address: string; action: PlanAction; reason?: string; type?: string };
 export type PlanOutput = { name: string; action: string; sensitive: boolean };
 export type PlanEvents = {
@@ -101,7 +101,7 @@ function actionName(action: string): PlanAction | undefined {
   if (action === "forget") return "forget";
   if (action === "move") return "move";
   if (action === "import") return "import";
-  return undefined;
+  return action;
 }
 
 function actionFor(actions: unknown[]): PlanAction | undefined {
@@ -115,5 +115,5 @@ function actionFor(actions: unknown[]): PlanAction | undefined {
   if (first === "forget") return "forget";
   if (first === "move") return "move";
   if (first === "import") return "import";
-  return undefined;
+  return typeof first === "string" ? first : undefined;
 }

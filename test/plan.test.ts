@@ -24,6 +24,13 @@ describe("plan events, risk, and expectations", () => {
     const output = parsePlanEvents('{"type":"outputs","outputs":{"token":{"sensitive":true,"change":{"actions":["no-op"]}}}}');
     expect(classifyRisks(output)).toHaveLength(0);
   });
+  it("retains provider-specific actions in changes and drift", () => {
+    const events = parsePlanEvents(
+      '{"type":"planned_change","change":{"resource":{"addr":"x"},"actions":["provider-action"]}}\n{"type":"resource_drift","change":{"resource":{"addr":"y"},"actions":["provider-drift"]}}',
+    );
+    expect(events.changes[0]?.action).toBe("provider-action");
+    expect(events.drift[0]?.action).toBe("provider-drift");
+  });
   it("treats incomplete summaries as unavailable", () => {
     const events = parsePlanEvents('{"type":"change_summary","changes":{"import":1}}');
     expect(events.summary).toBe("unavailable");
@@ -36,7 +43,7 @@ describe("plan events, risk, and expectations", () => {
     expect(events.summary).toBe("unavailable");
     expect(events.diagnostics).toHaveLength(1);
   });
-  it.each(["", "add=-1", "add=1.2", "add=1,add=2", "unknown=2", "add=1,"])(
+  it.each(["", "add=-1", "add=1.2", "add=1,add=2", "unknown=2", "add=1,", "add=9007199254740993"])(
     "rejects invalid expectation %s",
     (value) => {
       expect(() => parseExpect(value)).toThrow();

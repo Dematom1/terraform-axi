@@ -9,9 +9,11 @@ export function parseExpect(input: string): ExpectedCounts {
   for (const part of input.split(",")) {
     const match = /^(add|change|destroy)=(0|[1-9]\d*)$/.exec(part);
     if (!match) throw new Error(`invalid expected count: ${part}`);
+    const value = Number(match[2]);
+    if (!Number.isSafeInteger(value)) throw new Error(`invalid expected count: ${part}`);
     const key = match[1] as keyof ExpectedCounts;
     if (key in parsed) throw new Error(`duplicate expected count: ${key}`);
-    parsed[key] = Number(match[2]);
+    parsed[key] = value;
   }
   return parsed;
 }
