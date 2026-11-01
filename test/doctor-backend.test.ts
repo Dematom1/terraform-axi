@@ -35,6 +35,15 @@ describe("static backend inspection", () => {
     expect(inspectBackend(directory)).toMatchObject({ endpointHost: "s3.example.com", region: "us-east-1" });
   });
 
+  it("does not extract commented endpoint or region values", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(join(directory, "main.tf"), `terraform { backend "s3" {\n # endpoint = "https://s3.example.com"\n // region = "us-east-1"\n } }`);
+    expect(inspectBackend(directory)).toMatchObject({ type: "s3" });
+    expect(inspectBackend(directory)).not.toHaveProperty("endpointHost");
+    expect(inspectBackend(directory)).not.toHaveProperty("region");
+  });
+
   it("ignores backend-like text outside terraform and preserves comment markers in strings", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);

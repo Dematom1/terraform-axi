@@ -41,6 +41,29 @@ function maskSyntax(source: string): string {
   return chars.join("");
 }
 
+function maskComments(source: string): string {
+  const chars = source.split("");
+  let quoted = false;
+  let escaped = false;
+  for (let i = 0; i < source.length; i++) {
+    if (quoted) {
+      if (source[i] === '"' && !escaped) quoted = false;
+      escaped = source[i] === "\\" && !escaped;
+      if (source[i] !== "\\") escaped = false;
+    } else if (source[i] === '"') {
+      quoted = true;
+    } else if (source[i] === "#" || source.startsWith("//", i) || source.startsWith("/*", i)) {
+      const newline = source.indexOf("\n", i);
+      const end = source[i] === "#" || source.startsWith("//", i)
+        ? (newline < 0 ? source.length : newline)
+        : (source.indexOf("*/", i + 2) < 0 ? source.length : source.indexOf("*/", i + 2) + 2);
+      for (; i < end; i++) if (source[i] !== "\n") chars[i] = " ";
+      i--;
+    }
+  }
+  return chars.join("");
+}
+
 function blockRange(source: string, start: number): [number, number] | undefined {
   const open = source.indexOf("{", start);
   if (open < 0) return undefined;
@@ -88,7 +111,8 @@ export function inspectBackend(module: string): Backend | undefined {
     if (body && backendType) break;
   }
   if (!body || !backendType) return undefined;
-  const value = (name: string) => body.match(new RegExp(`\\b${name}\\s*=\\s*"((?:\\\\.|[^"\\\\])*)"`))?.[1];
+  const values = maskComments(body);
+  const value = (name: string) => values.match(new RegExp(`\\b${name}\\s*=\\s*"((?:\\\\.|[^"\\\\])*)"`))?.[1];
   const flags: Backend["flags"] = {};
   for (const name of ["skip_credentials_validation", "skip_region_validation", "skip_requesting_account_id", "skip_metadata_api_check", "skip_s3_checksum", "use_path_style"] as const)
     flags[name] = new RegExp(`\\b${name}\\s*=\\s*true\\b`).test(maskSyntax(body));
