@@ -121,13 +121,19 @@ async function home(): Promise<string> {
       validateWrapper(c.wrapper);
       const result = await run(c, c.modules[0]!, "version", 2_000);
       const version: unknown = JSON.parse(result.stdout);
+      const flavor =
+        version && typeof version === "object" && "terraform_version" in version
+          ? "terraform"
+          : version && typeof version === "object" && "tofu_version" in version
+            ? "opentofu"
+            : "unknown";
       const value =
         version && typeof version === "object" && "terraform_version" in version
           ? String(version.terraform_version)
           : version && typeof version === "object" && "tofu_version" in version
             ? String(version.tofu_version)
             : "version available";
-      versions.wrapper = `${c.binary === "auto" ? "wrapper-selected/unknown" : c.binary} ${value}`;
+      versions.wrapper = `${c.binary === "auto" ? `wrapper-selected/${flavor}` : c.binary} ${value}`;
     } catch (error) {
       versions.wrapper =
         error instanceof Error && error.message.includes("wrapper")

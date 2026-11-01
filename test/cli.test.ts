@@ -154,14 +154,17 @@ describe("terraform-axi scaffold", () => {
     }
   });
 
-  it("probes a configured module through wrapper argv", () => {
+  it.each([
+    ["terraform_version", "terraform"],
+    ["tofu_version", "opentofu"],
+  ])("identifies %s from a configured wrapper response", (field, flavor) => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");
     mkdirSync(configDir, { recursive: true });
     const wrapper = join(home, "wrapper executable");
     writeFileSync(
       wrapper,
-      '#!/bin/sh\ntest "$1" = module-a && test "$2" = version && test "$3" = -json || exit 1\nprintf \'{"terraform_version":"9.9.9"}\\n\'\n',
+      `#!/bin/sh\nprintf '{"${field}":"9.9.9"}\\n'\n`,
       { mode: 0o700 },
     );
     writeFileSync(
@@ -173,7 +176,7 @@ describe("terraform-axi scaffold", () => {
         encoding: "utf8",
         env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
       });
-      expect(output).toContain("wrapper: wrapper-selected/unknown 9.9.9");
+      expect(output).toContain(`wrapper: wrapper-selected/${flavor} 9.9.9`);
       expect(output).not.toMatch(/^\s+(terraform|tofu):/m);
     } finally {
       rmSync(home, { recursive: true, force: true });
