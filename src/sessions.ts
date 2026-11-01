@@ -1,9 +1,9 @@
-import { closeSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-export type Session = { cwd: string; commands: Record<string, number>; modules: Record<string, number>; ended_at: string };
-type Store = { sessions: Session[] };
+export type Session = { session_id: string; cwd: string; commands: Record<string, number>; modules: Record<string, number>; ended_at: string };
+type Store = { active: Record<string, Omit<Session, "ended_at">>; sessions: Session[] };
 const configDir = () => join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "terraform-axi");
 const dataPath = () => join(configDir(), "sessions.json");
 
@@ -18,42 +18,20 @@ function configuredModules(): Set<string> {
   return new Set();
 }
 
-
-function record(input: unknown): Session | undefined {
-  if (!input || typeof input !== "object") return;
-  const value = input as Record<string, unknown>;
-  if (typeof value.cwd !== "string" || typeof value.transcript_path !== "string") return;
-  const commands: Record<string, number> = {};
-  const modules: Record<string, number> = {};
-  const configured = configuredModules();
+function readStore(path: string): Store {
   try {
-    for (const line of readFileSync(value.transcript_path, "utf8").split("\n")) {
-      let row: unknown;
-      try { row = JSON.parse(line); } catch { continue; }
-      if (!row || typeof row !== "object") continue;
-      const content = (row as Record<string, unknown>).message;
-      if (!content || typeof content !== "object") continue;
-      const body = (content as Record<string, unknown>).content;
-      if (!Array.isArray(body)) continue;
-      for (const item of body) {
-        if (!item || typeof item !== "object") continue;
-        const part = item as Record<string, unknown>;
-        if (part.type !== "tool_use" || !part.input || typeof part.input !== "object") continue;
-        const command = (part.input as Record<string, unknown>).command;
-        if (typeof command !== "string") continue;
-        for (const match of command.matchAll(/(?:^|[;&|]\s*)terraform-axi\s+(plan|drift|state|doctor)\s+([^\s;&|]+)/g)) {
-          commands[match[1]!] = (commands[match[1]!] ?? 0) + 1;
-          if (configured.has(match[2]!)) modules[match[2]!] = (modules[match[2]!] ?? 0) + 1;
-        }
-      }
-    }
-  } catch { /* Transcript may have been removed. */ }
-  return { cwd: value.cwd, commands, modules, ended_at: new Date().toISOString() };
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("malformed session store");
+    const value = parsed as Record<string, unknown>;
+    if (!Array.isArray(value.sessions) || (value.active !== undefined && (!value.active || typeof value.active !== "object" || Array.isArray(value.active)))) throw new Error("malformed session store");
+    return { active: (value.active ?? {}) as Store["active"], sessions: value.sessions as Session[] };
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { active: {}, sessions: [] };
+    throw error;
+  }
 }
 
-export function recordSession(input: unknown, path = dataPath()): void {
-  const session = record(input);
-  if (!session) return;
+function updateStore(update: (store: Store) => void, path = dataPath()): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const lock = `${path}.lock`;
   let fd: number;
@@ -62,17 +40,18 @@ export function recordSession(input: unknown, path = dataPath()): void {
     catch (error) {
       if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") throw error;
       try {
-        const observed = statSync(lock);
-        if (Date.now() - observed.mtimeMs > 30_000) {
+        const before = statSync(lock);
+        if (Date.now() - before.mtimeMs > 30_000) {
           const stale = `${lock}.${process.pid}.${Math.random().toString(36).slice(2)}`;
           renameSync(lock, stale);
           try {
             const moved = statSync(stale);
-            if (moved.dev === observed.dev && moved.ino === observed.ino) continue;
-            try { linkSync(stale, lock); } catch { /* Another writer acquired the lock. */ }
-          } finally {
-            unlinkSync(stale);
-          }
+            if (moved.dev === before.dev && moved.ino === before.ino) {
+              unlinkSync(stale);
+              continue;
+            }
+            try { writeFileSync(lock, readFileSync(stale), { flag: "wx", mode: 0o600 }); } catch { /* A writer already holds the lock. */ }
+          } finally { try { unlinkSync(stale); } catch { /* Already removed. */ } }
         }
       } catch { /* Lock disappeared. */ }
       if (existsSync(lock)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
@@ -81,32 +60,42 @@ export function recordSession(input: unknown, path = dataPath()): void {
   try {
     writeFileSync(fd, `${Date.now()}\n`);
     closeSync(fd);
-    let store: Store = { sessions: [] };
-    try {
-      const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray((parsed as Record<string, unknown>).sessions))
-        throw new Error("malformed session store");
-      store = parsed as Store;
-    } catch (error) {
-      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") throw error;
-    }
-    store.sessions = [...store.sessions, session].slice(-50);
+    const store = readStore(path);
+    update(store);
     const temp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
-    writeFileSync(temp, `${JSON.stringify(store)}\n`, { flag: "wx", mode: 0o600 });
-    renameSync(temp, path);
+    try {
+      writeFileSync(temp, `${JSON.stringify(store)}\n`, { flag: "wx", mode: 0o600 });
+      renameSync(temp, path);
+    } finally { try { unlinkSync(temp); } catch { /* Renamed or absent. */ } }
   } finally { unlinkSync(lock); }
+}
+
+export function recordInvocation(command: string | undefined, module: string | undefined, cwd = process.cwd(), sessionId = process.env.CLAUDE_SESSION_ID): void {
+  if (!sessionId || !/^[a-zA-Z0-9_-]+$/.test(sessionId) || !command || !["plan", "drift", "state", "doctor"].includes(command)) return;
+  const modules = configuredModules();
+  updateStore((store) => {
+    const session = store.active[sessionId] ?? { session_id: sessionId, cwd, commands: {}, modules: {} };
+    session.commands[command] = (session.commands[command] ?? 0) + 1;
+    if (module && modules.has(module)) session.modules[module] = (session.modules[module] ?? 0) + 1;
+    store.active[sessionId] = session;
+  });
+}
+
+export function recordSession(input: unknown, path = dataPath()): void {
+  if (!input || typeof input !== "object") return;
+  const sessionId = (input as Record<string, unknown>).session_id;
+  if (typeof sessionId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(sessionId)) return;
+  updateStore((store) => {
+    const active = store.active[sessionId];
+    if (!active) return;
+    delete store.active[sessionId];
+    store.sessions = [...store.sessions, { ...active, ended_at: new Date().toISOString() }].slice(-50);
+  }, path);
 }
 
 export function lastSession(path = dataPath(), cwd = process.cwd()): Session | undefined {
   try {
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (!parsed || typeof parsed !== "object") return;
-    const sessions = (parsed as Record<string, unknown>).sessions;
-    if (!Array.isArray(sessions)) return;
-    for (let index = sessions.length - 1; index >= 0; index--)
-      if (sessions[index] && typeof sessions[index] === "object" && (sessions[index] as Session).cwd === cwd)
-        return sessions[index] as Session;
-    return;
+    const store = readStore(path);
+    return store.sessions.slice().reverse().find((session) => session.cwd === cwd);
   } catch { return undefined; }
 }
-

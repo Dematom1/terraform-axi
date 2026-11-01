@@ -7,7 +7,7 @@ import {
 } from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
 import { homedir } from "node:os";
-import { chmodSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION } from "./version.js";
@@ -15,7 +15,7 @@ import { parseArgs } from "./args.js";
 import { readConfig, writeConfig, type Config } from "./config.js";
 import { run, validateWrapper } from "./runner.js";
 import { CliError } from "./errors.js";
-import { lastSession } from "./sessions.js";
+import { lastSession, recordInvocation } from "./sessions.js";
 
 const name = "terraform-axi";
 const configPath = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), name, "config.json");
@@ -54,6 +54,19 @@ function writeClaudeSettings(settings: Record<string, unknown>): void {
   } finally {
     try { unlinkSync(temp); } catch { /* Renamed or absent. */ }
   }
+}
+function withClaudeSettingsLock<T>(action: () => T): T {
+  mkdirSync(dirname(claudeSettingsPath), { recursive: true, mode: 0o700 });
+  const lock = `${claudeSettingsPath}.terraform-axi.lock`;
+  let fd: number;
+  for (;;) {
+    try { fd = openSync(lock, "wx", 0o600); break; }
+    catch (error) {
+      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
+  try { return action(); } finally { closeSync(fd); unlinkSync(lock); }
 }
 function sessionEndStatus(settings: Record<string, unknown>): "installed" | "missing" | "stale" {
   const hooks = settings.hooks;
@@ -117,14 +130,14 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
         hooks: { sessionStart: sessionStartHookStatus({ marker: name }), sessionEnd: sessionEndStatus(readClaudeSettings()) },
         help: hints,
       });
-    if (args[0] === "uninstall") {
+    if (args[0] === "uninstall") return withClaudeSettingsLock(() => {
       uninstallSessionStartHooks({ marker: name });
       const settings = readClaudeSettings();
       updateSessionEnd(settings, true);
       writeClaudeSettings(settings);
       return output({ hooks: "removed", help: hints });
-    }
-    if (args[0] === "hooks") {
+    });
+    if (args[0] === "hooks") return withClaudeSettingsLock(() => {
       const errors: string[] = [];
       installSessionStartHooks({
         marker: name,
@@ -140,7 +153,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
         hooks: errors.length ? errors : { sessionStart: sessionStartHookStatus({ marker: name }), sessionEnd: sessionEndStatus(settings) },
         help: hints,
       });
-    }
+    });
     const parsed = parseArgs(args, [
       { name: "--binary", values: ["terraform", "tofu", "auto"] },
       { name: "--wrapper" },
@@ -219,6 +232,7 @@ export async function main(
   argv = process.argv.slice(2),
   stdout: { write: (chunk: string) => unknown } = process.stdout,
 ): Promise<void> {
+  recordInvocation(argv[0], argv[1]);
   if (argv.length === 2 && argv[0] === "update" && argv[1] === "--help") {
     stdout.write(output({ usage: "terraform-axi update", help: hints }));
     return;
