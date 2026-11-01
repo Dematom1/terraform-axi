@@ -1,7 +1,7 @@
-import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readSync, readdirSync, renameSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readSync, renameSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 
 export type Entry = { s: string | null; cmd: string; module: string | null; t: number };
 export type LastSession = { commands: Record<string, number>; modules: Record<string, number>; ended_at: string };
@@ -26,7 +26,8 @@ export function recordInvocation(cmd: string, module: string | null, path = sess
   try {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     try {
-      if (statSync(path).size > MAX_BYTES) renameSync(path, `${path}.${randomUUID()}`);
+      // One old generation is kept; two processes rotating at once can drop it, losing only old memory.
+      if (statSync(path).size > MAX_BYTES) renameSync(path, `${path}.1`);
     } catch {
       /* no file yet, or another process rotated it first */
     }
@@ -67,19 +68,9 @@ function readTail(path: string): Entry[] {
   }
 }
 
-/** Summarizes the most recent session other than `current`, from the tails of the log and its rotated generation. */
+/** Summarizes the most recent session other than `current`, by log order across the rotated and active tails. */
 export function lastSession(current = sessionKey(), path = sessionsPath()): LastSession | undefined {
-  let rotated: string[] = [];
-  try {
-    rotated = readdirSync(dirname(path))
-      .filter((file) => file.startsWith(`${basename(path)}.`))
-      .map((file) => join(dirname(path), file))
-      .sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs);
-  } catch {
-    /* missing log directory */
-  }
-  const generations = [...rotated, path];
-  const entries = generations.flatMap(readTail);
+  const entries = [...readTail(`${path}.1`), ...readTail(path)];
   const target = [...entries].reverse().find((entry) => entry.s !== null && entry.s !== current)?.s;
   if (!target) return undefined;
   const session: LastSession = { commands: {}, modules: {}, ended_at: "" };

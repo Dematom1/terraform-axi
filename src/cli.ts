@@ -140,14 +140,10 @@ async function home(): Promise<string> {
     }
   }
   const session = lastSession();
-  const used = Object.entries(session?.modules ?? {})
-    .filter(([module]) => c.modules.includes(module))
-    .sort((a, b) => b[1] - a[1])[0]?.[0];
-  const module = used ?? c.modules[0];
   return output({
     modules: c.modules.length ? c.modules : "none configured",
     ...(session ? { last_session: session } : {}),
-    next_action: module ? `terraform-axi setup status` : "terraform-axi setup --module <name-or-path>",
+    next_action: c.modules.length ? "terraform-axi setup status" : "terraform-axi setup --module <name-or-path>",
     binary: c.binary,
     wrapper: c.wrapper ?? "none",
     versions,
@@ -155,18 +151,12 @@ async function home(): Promise<string> {
   });
 }
 const moduleCommands = ["plan", "drift", "doctor", "state"];
-/** Records only the routed command name and a configured module name, never other argument values. */
-function record(argv: string[]): void {
+/** The routed command name and a configured module name only, never other argument values. */
+export function invocation(argv: string[], modules: string[]): { cmd: string; module: string | null } | undefined {
   const cmd = argv.length === 0 ? "home" : argv[0]!;
-  if (cmd !== "home" && (!Object.hasOwn(commands, cmd) || argv.includes("--help"))) return;
-  let module: string | null = null;
-  try {
-    const modules = config().modules;
-    if (moduleCommands.includes(cmd)) module = argv.slice(1).find((arg) => modules.includes(arg)) ?? null;
-  } catch {
-    /* malformed config: the command reports it */
-  }
-  recordInvocation(cmd, module);
+  if (cmd !== "home" && (!Object.hasOwn(commands, cmd) || argv.includes("--help"))) return undefined;
+  const module = moduleCommands.includes(cmd) ? (argv.slice(1).find((arg) => modules.includes(arg)) ?? null) : null;
+  return { cmd, module };
 }
 export async function main(
   argv = process.argv.slice(2),
@@ -194,6 +184,15 @@ export async function main(
       exitCode: error instanceof CliError ? error.exitCode : 1,
     }),
   });
-  record(argv);
+  // Usage errors (2) and failures (1) are not usage worth remembering; an --expect mismatch (3) is.
+  if (process.exitCode === 1 || process.exitCode === 2) return;
+  let modules: string[] = [];
+  try {
+    modules = config().modules;
+  } catch {
+    /* malformed config: nothing to attribute */
+  }
+  const used = invocation(argv, modules);
+  if (used) recordInvocation(used.cmd, used.module);
 }
 if (import.meta.url === `file://${process.argv[1]}`) void main();

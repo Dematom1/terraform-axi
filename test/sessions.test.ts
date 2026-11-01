@@ -1,8 +1,18 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { invocation } from "../src/cli.js";
 import { lastSession, MAX_BYTES, recordInvocation, sessionKey } from "../src/sessions.js";
 
 const root = join(import.meta.dirname, "..");
@@ -43,7 +53,7 @@ describe("session memory", () => {
       try {
         cli(args, { ...env, TERRAFORM_AXI_SESSION: "raw-session-id" });
       } catch {
-        /* plan and state are not implemented yet; recording still happens */
+        /* plan and state are not implemented yet, so they fail and are not recorded */
       }
     const raw = readFileSync(log, "utf8");
     for (const leaked of ["destroy=0", "--expect", secret, "raw-session-id", "/elsewhere", home])
@@ -51,12 +61,25 @@ describe("session memory", () => {
     const s = sessionKey("raw-session-id");
     expect(s).toMatch(/^[0-9a-f]{12}$/);
     expect(lines(log).map(({ t, ...rest }) => (expect(typeof t).toBe("number"), rest))).toEqual([
-      { s, cmd: "plan", module: "infra/prod" },
-      { s, cmd: "state", module: null },
-      { s, cmd: "state", module: "infra/prod" },
       { s, cmd: "home", module: null },
     ]);
     expect(statSync(log).mode & 0o777).toBe(0o600);
+  });
+
+  it("maps argv to the routed command and a configured module only", () => {
+    const modules = ["infra/prod"];
+    expect(
+      invocation(["plan", "infra/prod", "--expect", "destroy=0", "--token=AKIAIOSFODNN7EXAMPLE"], modules),
+    ).toEqual({
+      cmd: "plan",
+      module: "infra/prod",
+    });
+    expect(invocation(["state", "list", "infra/prod"], modules)).toEqual({ cmd: "state", module: "infra/prod" });
+    expect(invocation(["state", "/elsewhere/module"], modules)).toEqual({ cmd: "state", module: null });
+    expect(invocation(["setup", "--module", "infra/prod"], modules)).toEqual({ cmd: "setup", module: null });
+    expect(invocation([], modules)).toEqual({ cmd: "home", module: null });
+    expect(invocation(["plan", "--help"], modules)).toBeUndefined();
+    expect(invocation(["toString"], modules)).toBeUndefined();
   });
 
   it("records unkeyed lines without a session id and skips help and unknown commands", () => {
@@ -89,7 +112,23 @@ describe("session memory", () => {
     expect(lastSession(current, join(home, "missing.jsonl"))).toBeUndefined();
   });
 
-  it("rotates above 1 MB, keeps one old generation, and still finds the previous session", () => {
+  it("aggregates a session split across rotation and orders same-second sessions by log position", () => {
+    const { log } = setup();
+    const [a, b] = [sessionKey("a"), sessionKey("b")];
+    writeFileSync(`${log}.1`, `${JSON.stringify({ s: a, cmd: "drift", module: null, t: 5 })}\n`);
+    writeFileSync(
+      log,
+      [
+        { s: b, cmd: "plan", module: null, t: 9 },
+        { s: a, cmd: "state", module: null, t: 9 },
+      ]
+        .map((entry) => `${JSON.stringify(entry)}\n`)
+        .join(""),
+    );
+    expect(lastSession(sessionKey("now"), log)?.commands).toEqual({ drift: 1, state: 1 });
+  });
+
+  it("rotates above 1 MB, keeping exactly one old generation", () => {
     const { log } = setup();
     const old = sessionKey("old");
     writeFileSync(
@@ -106,6 +145,14 @@ describe("session memory", () => {
       ended_at: "1970-01-01T00:00:01.000Z",
     });
     expect(lastSession(old, log)?.commands).toEqual({ home: 1, plan: 1 });
+    writeFileSync(log, `${"y".repeat(MAX_BYTES)}\n`, { flag: "a" });
+    recordInvocation("drift", "infra/prod", log, old);
+    expect(
+      readdirSync(dirname(log))
+        .filter((file) => file.startsWith("sessions.jsonl"))
+        .sort(),
+    ).toEqual(["sessions.jsonl", "sessions.jsonl.1"]);
+    expect(readFileSync(`${log}.1`, "utf8")).not.toContain('"t":1}');
   });
 
   it("keeps every line from concurrent CLI processes", async () => {
@@ -128,18 +175,18 @@ describe("session memory", () => {
     expect(new Set(lines(log).map((line) => line.s)).size).toBe(10);
   });
 
-  it("shows last_session and the next plan in the home view", () => {
-    const { env } = setup(["infra/dev", "infra/prod"]);
+  it("shows the previous session's commands in the home view and recommends an implemented command", () => {
+    const { log, env } = setup(["infra/dev", "infra/prod"]);
     cli(["setup", "status"], { ...env, TERRAFORM_AXI_SESSION: "one" });
     try {
-      cli(["plan", "infra/prod"], { ...env, TERRAFORM_AXI_SESSION: "one" });
+      cli(["plan", "--bogus"], { ...env, TERRAFORM_AXI_SESSION: "one" });
     } catch {
-      /* not implemented */
+      /* rejected invocations are not recorded */
     }
     const output = cli([], { ...env, TERRAFORM_AXI_SESSION: "two" });
-    expect(output).toContain("last_session");
-    expect(output).toContain("next_action: terraform-axi plan infra/prod");
-    expect(cli([], { ...env, TERRAFORM_AXI_SESSION: "one" })).toContain("next_action: terraform-axi plan infra/dev");
+    expect(output).toMatch(/last_session:\n\s+commands:\n\s+setup: 1\n/);
+    expect(output).toContain("next_action: terraform-axi setup status");
+    expect(lines(log).map((line) => line.cmd)).toEqual(["setup", "home"]);
   });
 
   it("suggests registering a module when none is configured", () => {
