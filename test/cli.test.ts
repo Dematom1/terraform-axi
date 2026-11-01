@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -154,27 +154,53 @@ describe("terraform-axi scaffold", () => {
     }
   });
 
-  it("probes a configured module through wrapper argv", () => {
+  it.each([
+    ["terraform_version", "terraform"],
+    ["tofu_version", "opentofu"],
+  ])("identifies %s from a configured wrapper response", (field, flavor) => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");
     mkdirSync(configDir, { recursive: true });
-    const wrapper = join(home, "wrapper executable");
-    writeFileSync(
-      wrapper,
-      '#!/bin/sh\ntest "$1" = module-a && test "$2" = version && test "$3" = -json || exit 1\nprintf \'{"terraform_version":"9.9.9"}\\n\'\n',
-      { mode: 0o700 },
-    );
+    const wrapper = join(home, "wrapper-executable");
+    writeFileSync(wrapper, `#!/bin/sh\nprintf '{"${field}":"9.9.9"}\\n'\n`, { mode: 0o700 });
     writeFileSync(
       join(configDir, "config.json"),
-      JSON.stringify({ binary: "auto", modules: ["module-a"], wrapper: `"${wrapper}" {module}` }),
+      JSON.stringify({ binary: "auto", modules: ["module-a"], wrapper: `${wrapper} {module}` }),
     );
     try {
       const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
         encoding: "utf8",
         env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
       });
-      expect(output).toContain("wrapper: wrapper-selected/unknown 9.9.9");
+      expect(output).toContain(`wrapper: wrapper-selected/${flavor} 9.9.9`);
       expect(output).not.toMatch(/^\s+(terraform|tofu):/m);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("shows why auto mode falls back to OpenTofu", () => {
+    const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
+    writeFileSync(
+      join(home, "terraform"),
+      `#!/bin/sh
+exit 1
+`,
+      { mode: 0o700 },
+    );
+    writeFileSync(
+      join(home, "tofu"),
+      `#!/bin/sh
+printf '{"tofu_version":"1.2.3"}\\n'
+`,
+      { mode: 0o700 },
+    );
+    try {
+      const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
+        encoding: "utf8",
+        env: { PATH: home, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
+      });
+      expect(output).toContain("1.2.3 (Terraform probe failed: failed)");
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -224,17 +250,72 @@ describe("terraform-axi scaffold", () => {
     }
   });
 
-  it("ignores an invalid saved modules value in the built CLI", () => {
+  it("rejects unexpected setup arguments without changing config", () => {
+    const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
+    const configDir = join(home, ".config", "terraform-axi");
+    mkdirSync(configDir, { recursive: true });
+    const path = join(configDir, "config.json");
+    const original = JSON.stringify({ binary: "auto", modules: ["module-a"] });
+    writeFileSync(path, original);
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [join(root, "dist", "bin", "terraform-axi.js"), "setup", "--binary", "tofu", "typo"],
+        {
+          encoding: "utf8",
+          env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
+        },
+      );
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("VALIDATION_ERROR");
+      expect(readFileSync(path, "utf8")).toBe(original);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["status", "typo"],
+    ["hooks", "--bogus"],
+    ["uninstall", "typo"],
+  ])("rejects extra setup arguments for %s before handling it", (action, extra) => {
+    const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [join(root, "dist", "bin", "terraform-axi.js"), "setup", action, extra],
+        { encoding: "utf8", env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") } },
+      );
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("VALIDATION_ERROR");
+      expect(existsSync(join(home, ".config", "terraform-axi", "config.json"))).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("reports an invalid saved modules value as malformed config", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");
     mkdirSync(configDir, { recursive: true });
     writeFileSync(join(configDir, "config.json"), '{"modules":null}');
     try {
-      const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
+      const result = spawnSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
         encoding: "utf8",
         env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
       });
-      expect(output).toContain("modules: none configured");
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("malformed config");
+      const setup = spawnSync(
+        process.execPath,
+        [join(root, "dist", "bin", "terraform-axi.js"), "setup", "--binary", "tofu"],
+        {
+          encoding: "utf8",
+          env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
+        },
+      );
+      expect(setup.status).toBe(1);
+      expect(readFileSync(join(configDir, "config.json"), "utf8")).toBe('{"modules":null}');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
