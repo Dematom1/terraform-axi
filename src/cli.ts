@@ -93,8 +93,8 @@ const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};
-  if (c.wrapper) {
-    versions.wrapper = `via wrapper: not probed; check manually with: ${c.wrapper}`;
+  if (c.wrapper && c.modules.length === 0) {
+    versions.wrapper = "via wrapper: not probed; no exact check command is available without a configured module";
   }
   const binaries = c.wrapper ? [] : c.binary === "auto" ? ["terraform", "tofu"] : [c.binary];
   for (const binary of binaries) {
@@ -112,6 +112,32 @@ async function home(): Promise<string> {
       const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
       versions[binary] =
         code === "ENOENT" ? "not found" : `probe failed${typeof code === "string" ? ` (${code})` : ""}`;
+    }
+  }
+  if (c.wrapper && c.modules.length > 0) {
+    const wrapperParts = c.wrapper.trim().split(/\s+/);
+    const executable = wrapperParts[0] ?? "";
+    const configuredArgs = wrapperParts.slice(1);
+    const moduleToken = configuredArgs.indexOf("{module}");
+    const wrapperArgs =
+      moduleToken < 0
+        ? [...configuredArgs, "version", "-json"]
+        : configuredArgs.flatMap((arg, index) =>
+            index === moduleToken ? [c.modules[0], "version", "-json"] : [arg],
+          );
+    try {
+      const { execFileSync } = await import("node:child_process");
+      const version: unknown = JSON.parse(
+        execFileSync(executable, wrapperArgs, { encoding: "utf8", timeout: 2000 }),
+      );
+      versions.wrapper =
+        version && typeof version === "object" && "tofu_version" in version
+          ? `OpenTofu ${String(version.tofu_version)}`
+          : version && typeof version === "object" && "terraform_version" in version
+            ? `Terraform/OpenTofu ${String(version.terraform_version)}`
+            : "via wrapper: version available";
+    } catch {
+      versions.wrapper = "via wrapper: version probe failed";
     }
   }
   return output({
