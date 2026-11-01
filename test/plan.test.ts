@@ -210,6 +210,17 @@ describe("action decoding", () => {
 });
 
 describe("outputs", () => {
+  it("makes counts unavailable for an unrecognized output action", () => {
+    const events = parsePlanEvents(
+      [
+        JSON.stringify({ type: "outputs", outputs: { token: { change: { actions: ["future-action"] } } } }),
+        JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } }),
+      ].join("\n"),
+    );
+    expect(events.summary).toBe("unavailable");
+    expect(evaluateExpect(parseExpect("add=0"), events).status).toBe("fail");
+  });
+
   // F1: a sensitive output with a singular string action is a secret change.
   it.each([
     [{ action: "update" }, "update"],

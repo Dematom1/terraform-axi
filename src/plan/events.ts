@@ -187,5 +187,6 @@ export function parsePlanEvents(jsonl: string): PlanEvents {
         if (!PROGRESS.test(event.type)) result.unknownEvents++;
     }
   }
+  if (result.outputs.some((output) => output.action === "unknown")) result.summary = "unavailable";
   return result;
 }
