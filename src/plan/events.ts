@@ -60,9 +60,8 @@ function rawText(value: unknown): string {
 }
 
 /**
- * Decodes a singular `action` string or a plural `actions` array. A replace is `["delete","create"]` or
- * `["create","delete"]` (create_before_destroy). Any other value, or a mix with an unrecognized
- * element, decodes to `unknown` with its raw value kept so it is never silently dropped.
+ * Decodes a singular `action` string or a plural `actions` array. Any array containing both `create` and
+ * `delete` is a replace; extra values are kept raw. Other unrecognized values stay visible as `unknown`.
  */
 export function decodeAction(change: Json): Decoded {
   const value = "action" in change ? change.action : change.actions;
@@ -70,7 +69,11 @@ export function decodeAction(change: Json): Decoded {
   if (parts.length === 1) {
     const action = typeof parts[0] === "string" ? SINGLE.get(parts[0]) : undefined;
     if (action) return { action };
-  } else if (parts.length === 2 && parts.includes("create") && parts.includes("delete")) return { action: "REPLACE" };
+  } else if (parts.includes("create") && parts.includes("delete")) {
+    return parts.length === 2
+      ? { action: "REPLACE" }
+      : { action: "REPLACE", raw: rawText(value) };
+  }
   return { action: "unknown", raw: rawText(value) };
 }
 

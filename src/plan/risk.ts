@@ -40,6 +40,7 @@ export const isSecretType = matcher(SECRET_TYPES);
  * One row per planned change plus one per changed sensitive output, high-risk rows first.
  * A row is high risk when it destroys, replaces, touches an IAM or secret type, or has an
  * action this tool does not recognize. Reading a data source of such a type is not a change.
+ * Drift is classified separately by the drift command, not here.
  */
 export function classifyRisks(events: PlanEvents): RiskRow[] {
   const rows: RiskRow[] = events.changes.map((change) => {

@@ -150,7 +150,6 @@ describe("action decoding", () => {
     [{}, "missing"],
     [{ actions: ["provider-action"] }, '["provider-action"]'],
     [{ actions: ["delete", "provider-action"] }, '["delete","provider-action"]'],
-    [{ actions: ["provider-action", "create", "delete"] }, '["provider-action","create","delete"]'],
     [{ actions: ["create", "create"] }, '["create","create"]'],
     [{ actions: [] }, "[]"],
   ])("keeps unrecognized %j as unknown", (shape, raw) => {
@@ -170,6 +169,17 @@ describe("action decoding", () => {
   it("bounds the kept raw value", () => {
     const raw = planned({ resource, action: "x".repeat(500) }).changes[0]?.raw;
     expect(raw).toHaveLength(65);
+  });
+
+  it.each([
+    { actions: ["create", "delete", "read"], raw: '["create","delete","read"]' },
+    { actions: ["provider-action", "create", "delete"], raw: '["provider-action","create","delete"]' },
+  ])("keeps replacement with extra action values %j", ({ actions, raw }) => {
+    const events = planned({ resource, actions, reason: "cannot_update" });
+    expect(events.changes).toEqual([
+      { address: "x.y", type: "x", action: "REPLACE", reason: "cannot_update", raw },
+    ]);
+    expect(classifyRisks(events)[0]?.flags).toEqual(["destroy", "replace(cannot_update)"]);
   });
 
   // F4: the reason is read with either action form, under either field name.
