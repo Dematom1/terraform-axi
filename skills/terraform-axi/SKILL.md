@@ -12,9 +12,9 @@ Use terraform-axi for read-only infrastructure inspection. Never apply or destro
 | Command                                                          | Purpose                                                               |
 | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `terraform-axi`                                                  | Configured modules, wrapper, detected executable versions, and hints  |
-| `terraform-axi plan <module>`                                    | Planned change-risk summary (planned; not implemented)                 |
+| `terraform-axi plan <module>`                                    | Planned change-risk summary (planned; not implemented)                |
 | `terraform-axi plan <module> --expect add=N,change=N,destroy=N`  | Assert planned counts (planned; not implemented)                      |
-| `terraform-axi drift <module>`                                   | Drift summary (planned; not implemented)                             |
+| `terraform-axi drift <module>`                                   | Drift summary (planned; not implemented)                              |
 | `terraform-axi doctor <module>`                                  | Backend and credential diagnostics (planned; not implemented)         |
 | `terraform-axi state list <module>` / `state resource <address>` | State inspection with secrets redacted (planned; not implemented)     |
 | `terraform-axi setup` / `setup status`                           | Configure and inspect binary/wrapper settings                         |
