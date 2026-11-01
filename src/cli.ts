@@ -162,11 +162,12 @@ async function home(): Promise<string> {
       const moduleToken = wrapperParts.indexOf("{module}");
       const executable = wrapperParts[0] ?? "";
       const configuredArgs = wrapperParts.slice(1);
+      const modulePath = c.modules[0]!;
       const wrapperArgs =
         moduleToken < 0
           ? [...configuredArgs, "version", "-json"]
           : configuredArgs.flatMap((arg, index) =>
-              index === moduleToken - 1 ? [c.modules[0], "version", "-json"] : [arg],
+              index === moduleToken - 1 ? [modulePath, "version", "-json"] : [arg],
             );
       try {
         const { execFileSync } = await import("node:child_process");
