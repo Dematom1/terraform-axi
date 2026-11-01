@@ -17,7 +17,16 @@ const configPath = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"
 type Config = { binary: "terraform" | "tofu" | "auto"; wrapper?: string; modules: string[] };
 function config(): Config {
   try {
-    return { binary: "auto", modules: [], ...JSON.parse(readFileSync(configPath, "utf8")) };
+    const saved: unknown = JSON.parse(readFileSync(configPath, "utf8"));
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return { binary: "auto", modules: [] };
+    const binary =
+      "binary" in saved && (saved.binary === "terraform" || saved.binary === "tofu") ? saved.binary : "auto";
+    const modules =
+      "modules" in saved && Array.isArray(saved.modules) && saved.modules.every((module) => typeof module === "string")
+        ? saved.modules
+        : [];
+    const wrapper = "wrapper" in saved && typeof saved.wrapper === "string" ? { wrapper: saved.wrapper } : {};
+    return { binary, modules, ...wrapper };
   } catch {
     return { binary: "auto", modules: [] };
   }
@@ -80,7 +89,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
 };
-const help = `usage: terraform-axi <command> [args]\ncommands[5]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary (coming soon)\n  drift: detect drift (coming soon)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted (coming soon)\n  setup: configure binary and optional wrapper; setup status\n`;
+const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary (coming soon)\n  drift: detect drift (coming soon)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted (coming soon)\n  setup: configure binary and optional wrapper; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};
@@ -94,8 +103,10 @@ async function home(): Promise<string> {
         version && typeof version === "object" && "terraform_version" in version
           ? String(version.terraform_version)
           : "version available";
-    } catch {
-      versions[binary] = "not found";
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+      versions[binary] =
+        code === "ENOENT" ? "not found" : `probe failed${typeof code === "string" ? ` (${code})` : ""}`;
     }
   }
   return output({

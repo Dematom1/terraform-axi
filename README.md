@@ -19,20 +19,23 @@ Requires Node.js 20.19+.
 npm install -g terraform-axi
 terraform-axi setup --binary auto --wrapper 'just tf {module}'
 terraform-axi setup status
+terraform-axi setup hooks      # install user-level SessionStart hooks for supported agents
+terraform-axi setup uninstall  # remove terraform-axi-managed user-level hooks only
 ```
 
 The wrapper is optional. Use `{module}` as the module placeholder. Credentials are inherited by Terraform/OpenTofu from the environment; `_FILE` variants and credential commands will be supported by the diagnostic implementation. Never put credentials in arguments or config.
 
 ## Commands
 
-| Command                                                          | Purpose                                                              |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `terraform-axi`                                                  | Configured modules, wrapper, detected executable versions, and hints |
-| `terraform-axi plan <module>`                                    | Planned change-risk summary (coming soon)                            |
-| `terraform-axi plan <module> --expect add=N,change=N,destroy=N`  | Assert planned counts (coming soon)                                  |
-| `terraform-axi drift <module>`                                   | Drift summary (coming soon)                                          |
-| `terraform-axi doctor <module>`                                  | Backend and credential diagnostics (coming soon)                     |
-| `terraform-axi state list <module>` / `state resource <address>` | State inspection with secrets redacted (coming soon)                 |
-| `terraform-axi setup` / `setup status`                           | Configure and inspect binary/wrapper settings                        |
+| Command                                                          | Purpose                                                               |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `terraform-axi`                                                  | Configured modules, wrapper, detected executable versions, and hints  |
+| `terraform-axi plan <module>`                                    | Planned change-risk summary (coming soon)                             |
+| `terraform-axi plan <module> --expect add=N,change=N,destroy=N`  | Assert planned counts (coming soon)                                   |
+| `terraform-axi drift <module>`                                   | Drift summary (coming soon)                                           |
+| `terraform-axi doctor <module>`                                  | Backend and credential diagnostics (coming soon)                      |
+| `terraform-axi state list <module>` / `state resource <address>` | State inspection with secrets redacted (coming soon)                  |
+| `terraform-axi setup` / `setup status`                           | Configure and inspect binary/wrapper settings                         |
+| `terraform-axi setup hooks` / `setup uninstall`                  | Install or remove terraform-axi-managed user-level SessionStart hooks |
 
 See [VISION.md](VISION.md) for product boundaries and [CONTRIBUTING.md](CONTRIBUTING.md) before contributing.
