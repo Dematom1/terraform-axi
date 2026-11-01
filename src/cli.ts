@@ -7,7 +7,6 @@ import {
 } from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
 import { homedir } from "node:os";
-import { chmodSync, closeSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION } from "./version.js";
@@ -19,100 +18,6 @@ import { lastSession, recordInvocation } from "./sessions.js";
 
 const name = "terraform-axi";
 const configPath = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), name, "config.json");
-const claudeSettingsPath = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "settings.json");
-const cliUrl = fileURLToPath(import.meta.url);
-const cliDir = dirname(cliUrl);
-const sessionEndPath = join(cliDir, "..", cliUrl.endsWith(".ts") ? "dist/bin" : "bin", "terraform-axi-session-end.js");
-const sessionEndMarker = ` # ${name}-session-end`;
-const sessionEndCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(sessionEndPath)}${sessionEndMarker}`;
-function isManagedSessionEnd(command: string): boolean {
-  return command.endsWith(sessionEndMarker);
-}
-function readClaudeSettings(): Record<string, unknown> {
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(claudeSettingsPath, "utf8"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
-    return parsed as Record<string, unknown>;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return {};
-    throw new CliError("VALIDATION_ERROR: malformed Claude settings");
-  }
-}
-function writeClaudeSettings(settings: Record<string, unknown>): void {
-  mkdirSync(dirname(claudeSettingsPath), { recursive: true, mode: 0o700 });
-  let mode = 0o600;
-  try {
-    mode = statSync(claudeSettingsPath).mode & 0o777;
-  } catch (error) {
-    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") throw error;
-  }
-  const temp = `${claudeSettingsPath}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
-  try {
-    writeFileSync(temp, `${JSON.stringify(settings, null, 2)}\n`, { flag: "wx", mode });
-    chmodSync(temp, mode);
-    renameSync(temp, claudeSettingsPath);
-  } finally {
-    try { unlinkSync(temp); } catch { /* Renamed or absent. */ }
-  }
-}
-function withClaudeSettingsLock<T>(action: () => T): T {
-  mkdirSync(dirname(claudeSettingsPath), { recursive: true, mode: 0o700 });
-  const lock = `${claudeSettingsPath}.terraform-axi.lock`;
-  let fd: number;
-  for (;;) {
-    try { fd = openSync(lock, "wx", 0o600); break; }
-    catch (error) {
-      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") throw error;
-      try {
-        const before = statSync(lock);
-        const owner = Number(readFileSync(lock, "utf8"));
-        let alive = true;
-        if (Number.isSafeInteger(owner) && owner > 0) {
-          try { process.kill(owner, 0); } catch (failure) { alive = !!failure && typeof failure === "object" && "code" in failure && failure.code !== "ESRCH"; }
-        }
-        if (!alive) {
-          const stale = `${lock}.${process.pid}.${Math.random().toString(36).slice(2)}`;
-          renameSync(lock, stale);
-          try {
-            const moved = statSync(stale);
-            if (moved.dev === before.dev && moved.ino === before.ino) {
-              unlinkSync(stale);
-              continue;
-            }
-            try { linkSync(stale, lock); } catch { /* Another process acquired the lock. */ }
-          } finally { try { unlinkSync(stale); } catch { /* Already removed. */ } }
-        }
-      } catch { /* Lock disappeared. */ }
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-    }
-  }
-  try {
-    writeFileSync(fd, `${process.pid}\n`);
-    return action();
-  } finally { closeSync(fd); unlinkSync(lock); }
-}
-function sessionEndStatus(settings: Record<string, unknown>): "installed" | "missing" | "stale" {
-  const hooks = settings.hooks;
-  if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) return "missing";
-  const groups = (hooks as Record<string, unknown>).SessionEnd;
-  if (groups === undefined) return "missing";
-  if (!Array.isArray(groups)) return "stale";
-  const managed = groups.flatMap((group) => group && typeof group === "object" && Array.isArray((group as Record<string, unknown>).hooks) ? (group as { hooks: unknown[] }).hooks : []).filter((hook) => hook && typeof hook === "object" && typeof (hook as Record<string, unknown>).command === "string" && isManagedSessionEnd((hook as Record<string, unknown>).command as string)) as Array<Record<string, unknown>>;
-  return managed.some((hook) => hook.command === sessionEndCommand) ? "installed" : managed.length ? "stale" : "missing";
-}
-function updateSessionEnd(settings: Record<string, unknown>, remove: boolean): void {
-  const hooks = settings.hooks && typeof settings.hooks === "object" && !Array.isArray(settings.hooks) ? settings.hooks as Record<string, unknown> : {};
-  const existing = hooks.SessionEnd;
-  if (existing !== undefined && !Array.isArray(existing)) throw new CliError("VALIDATION_ERROR: Claude SessionEnd hooks must be an array");
-  const groups = (existing ?? []) as Array<Record<string, unknown>>;
-  const retained = groups.map((group) => {
-    if (!group || typeof group !== "object" || !Array.isArray(group.hooks)) return group;
-    return { ...group, hooks: group.hooks.filter((hook) => !hook || typeof hook !== "object" || !isManagedSessionEnd(String((hook as Record<string, unknown>).command ?? ""))) };
-  }).filter((group) => !group || typeof group !== "object" || !Array.isArray(group.hooks) || group.hooks.length);
-  if (!remove) retained.push({ matcher: "", hooks: [{ type: "command", command: sessionEndCommand, timeout: 10 }] });
-  if (retained.length) hooks.SessionEnd = retained; else delete hooks.SessionEnd;
-  if (Object.keys(hooks).length) settings.hooks = hooks; else delete settings.hooks;
-}
 function config(): Config {
   return readConfig(configPath);
 }
@@ -150,17 +55,14 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       return output({
         config: configPath,
         settings: config(),
-        hooks: { sessionStart: sessionStartHookStatus({ marker: name }), sessionEnd: sessionEndStatus(readClaudeSettings()) },
+        hooks: sessionStartHookStatus({ marker: name }),
         help: hints,
       });
-    if (args[0] === "uninstall") return withClaudeSettingsLock(() => {
+    if (args[0] === "uninstall") {
       uninstallSessionStartHooks({ marker: name });
-      const settings = readClaudeSettings();
-      updateSessionEnd(settings, true);
-      writeClaudeSettings(settings);
       return output({ hooks: "removed", help: hints });
-    });
-    if (args[0] === "hooks") return withClaudeSettingsLock(() => {
+    }
+    if (args[0] === "hooks") {
       const errors: string[] = [];
       installSessionStartHooks({
         marker: name,
@@ -169,14 +71,11 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
         distEntrypoints: ["dist/bin/terraform-axi-ctx.js"],
         onError: (message) => errors.push(message),
       });
-      const settings = readClaudeSettings();
-      updateSessionEnd(settings, false);
-      writeClaudeSettings(settings);
       return output({
-        hooks: errors.length ? errors : { sessionStart: sessionStartHookStatus({ marker: name }), sessionEnd: sessionEndStatus(settings) },
+        hooks: errors.length ? errors : sessionStartHookStatus({ marker: name }),
         help: hints,
       });
-    });
+    }
     const parsed = parseArgs(args, [
       { name: "--binary", values: ["terraform", "tofu", "auto"] },
       { name: "--wrapper" },
@@ -241,21 +140,39 @@ async function home(): Promise<string> {
     }
   }
   const session = lastSession();
+  const used = Object.entries(session?.modules ?? {})
+    .filter(([module]) => c.modules.includes(module))
+    .sort((a, b) => b[1] - a[1])[0]?.[0];
+  const module = used ?? c.modules[0];
   return output({
     modules: c.modules.length ? c.modules : "none configured",
-    last_session: session,
-    next_action: "setup status",
+    ...(session ? { last_session: session } : {}),
+    next_action: module ? `terraform-axi plan ${module}` : "terraform-axi setup --module <name-or-path>",
     binary: c.binary,
     wrapper: c.wrapper ?? "none",
     versions,
     help: hints,
   });
 }
+const moduleCommands = ["plan", "drift", "doctor", "state"];
+/** Records only the routed command name and a configured module name, never other argument values. */
+function record(argv: string[]): void {
+  const cmd = argv.length === 0 ? "home" : argv[0]!;
+  if (cmd !== "home" && (!Object.hasOwn(commands, cmd) || argv.includes("--help"))) return;
+  let module: string | null = null;
+  try {
+    const modules = config().modules;
+    if (moduleCommands.includes(cmd)) module = argv.slice(1).find((arg) => modules.includes(arg)) ?? null;
+  } catch {
+    /* malformed config: the command reports it */
+  }
+  recordInvocation(cmd, module);
+}
 export async function main(
   argv = process.argv.slice(2),
   stdout: { write: (chunk: string) => unknown } = process.stdout,
 ): Promise<void> {
-  recordInvocation(argv[0], argv[1]);
+  record(argv);
   if (argv.length === 2 && argv[0] === "update" && argv[1] === "--help") {
     stdout.write(output({ usage: "terraform-axi update", help: hints }));
     return;
