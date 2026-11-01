@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { statSync } from "node:fs";
+import { resolve } from "node:path";
 import { CliError } from "./errors.js";
 import type { Config } from "./config.js";
 
@@ -14,16 +16,36 @@ const operations = {
   workspace_list: ["workspace", "list"],
 } as const;
 export type Operation = keyof typeof operations;
-const denied = new Set(["apply", "destroy", "import", "taint", "untaint", "force-unlock", "login", "logout"]);
+const denied = new Set([
+  "apply",
+  "destroy",
+  "import",
+  "init",
+  "refresh",
+  "taint",
+  "untaint",
+  "force-unlock",
+  "console",
+  "login",
+  "logout",
+  "test",
+]);
+const deniedState = new Set(["pull", "push", "rm", "mv", "replace-provider", "identities"]);
+const deniedWorkspace = new Set(["new", "select", "delete"]);
 export function assertAllowed(args: string[]): void {
-  if (args.some((arg) => denied.has(arg) || arg.startsWith("-out=")))
+  if (
+    args.some((arg) => denied.has(arg) || arg.startsWith("-out=")) ||
+    (args[0] === "state" && args.some((arg) => deniedState.has(arg))) ||
+    (args[0] === "workspace" && args.some((arg) => deniedWorkspace.has(arg))) ||
+    (args[0] === "show" && args.length > 1)
+  )
     throw new CliError("unsupported Terraform argument");
 }
 export function validateWrapper(wrapper: string): void {
   wrapperArgs(wrapper, "module", []);
 }
 
-function wrapperArgs(wrapper: string, module: string, args: string[]): [string, string[]] {
+export function wrapperArgs(wrapper: string, module: string, args: string[]): [string, string[]] {
   if (/[|;&$`<>\r\n]/.test(wrapper)) throw new CliError("wrapper contains shell metacharacters; use a script");
   const words =
     wrapper
@@ -41,6 +63,28 @@ function wrapperArgs(wrapper: string, module: string, args: string[]): [string, 
   words[indexes[0]!] = module;
   return [words[0]!, [...words.slice(1), ...args]];
 }
+async function resolveBinary(binary: Config["binary"]): Promise<"terraform" | "tofu"> {
+  if (binary !== "auto") return binary;
+  try {
+    await execute("terraform", ["version", "-json"], { timeout: 2_000, env: process.env });
+    return "terraform";
+  } catch (error) {
+    if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) {
+      throw new CliError(
+        error && typeof error === "object" && "code" in error && error.code === "EACCES" ? "not executable" : "failed",
+      );
+    }
+  }
+  try {
+    await execute("tofu", ["version", "-json"], { timeout: 2_000, env: process.env });
+    return "tofu";
+  } catch (error) {
+    throw new CliError(
+      error && typeof error === "object" && "code" in error && error.code === "EACCES" ? "not executable" : "not found",
+    );
+  }
+}
+
 export async function run(
   config: Config,
   module: string,
@@ -53,8 +97,17 @@ export async function run(
   let argv: string[];
   if (config.wrapper) [file, argv] = wrapperArgs(config.wrapper, module, args);
   else {
-    file = config.binary === "auto" ? "terraform" : config.binary;
-    argv = [`-chdir=${module}`, ...args];
+    file = await resolveBinary(config.binary);
+    if (module) {
+      const directory = resolve(module);
+      try {
+        if (!statSync(directory).isDirectory()) throw new CliError(`module directory not found: ${module}`);
+      } catch (error) {
+        if (error instanceof CliError) throw error;
+        throw new CliError(`module directory not found: ${module}`);
+      }
+      argv = [`-chdir=${directory}`, ...args];
+    } else argv = args;
   }
   try {
     return await execute(file, argv, {

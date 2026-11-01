@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { VERSION } from "./version.js";
 import { parseArgs } from "./args.js";
 import { readConfig, writeConfig, type Config } from "./config.js";
-import { validateWrapper } from "./runner.js";
+import { run, validateWrapper } from "./runner.js";
 
 const name = "terraform-axi";
 const configPath = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), name, "config.json");
@@ -21,60 +21,6 @@ function config(): Config {
 }
 function output(value: unknown): string {
   return encode(value);
-}
-function parseWrapperCommand(command: string): string[] | undefined {
-  const forbidden = new Set([
-    ";",
-    "&",
-    "|",
-    "<",
-    ">",
-    "$",
-    "`",
-    "(",
-    ")",
-    "{",
-    "}",
-    "*",
-    "?",
-    "!",
-    "[",
-    "]",
-    "\n",
-    "\r",
-  ]);
-  if ([...command.replaceAll("{module}", "")].some((char) => forbidden.has(char))) return undefined;
-  const args: string[] = [];
-  let token = "";
-  let quote = "";
-  let started = false;
-  let escaped = false;
-  for (const char of command) {
-    if (escaped) {
-      token += char;
-      escaped = false;
-      started = true;
-    } else if (char === "\\") {
-      escaped = true;
-    } else if (quote) {
-      if (char === quote) quote = "";
-      else token += char;
-      started = true;
-    } else if (char === "'" || char === '"') {
-      quote = char;
-      started = true;
-    } else if (/\s/.test(char)) {
-      if (started) args.push(token);
-      token = "";
-      started = false;
-    } else {
-      token += char;
-      started = true;
-    }
-  }
-  if (quote || escaped) return undefined;
-  if (started) args.push(token);
-  return args.length ? args : undefined;
 }
 const hints = ["Run `terraform-axi setup` to configure Terraform/OpenTofu", "Run `terraform-axi --help` for commands"];
 const notImplemented = () => {
@@ -155,9 +101,8 @@ async function home(): Promise<string> {
   const binaries = c.wrapper ? [] : c.binary === "auto" ? ["terraform", "tofu"] : [c.binary];
   for (const binary of binaries) {
     try {
-      const { execFileSync } = await import("node:child_process");
-      const rawVersion = execFileSync(binary, ["version", "-json"], { encoding: "utf8", timeout: 2000 });
-      const version: unknown = JSON.parse(rawVersion);
+      const result = await run({ ...c, binary: binary as Config["binary"] }, "", "version", 2_000);
+      const version: unknown = JSON.parse(result.stdout);
       versions[binary] =
         version && typeof version === "object" && "terraform_version" in version
           ? String(version.terraform_version)
@@ -165,41 +110,26 @@ async function home(): Promise<string> {
             ? String(version.tofu_version)
             : "version available";
     } catch (error) {
-      const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
-      versions[binary] =
-        code === "ENOENT" ? "not found" : `probe failed${typeof code === "string" ? ` (${code})` : ""}`;
+      versions[binary] = error instanceof Error ? error.message : "probe failed";
     }
   }
   if (c.wrapper && c.modules.length > 0) {
-    const wrapperParts = parseWrapperCommand(c.wrapper);
-    if (
-      !wrapperParts ||
-      wrapperParts[0] === "{module}" ||
-      wrapperParts.filter((part) => part === "{module}").length !== 1 ||
-      wrapperParts.some((part) => part !== "{module}" && part.includes("{module}"))
-    ) {
-      versions.wrapper = "via wrapper: not probed; wrapper command cannot be represented safely";
-    } else {
-      const moduleToken = wrapperParts.indexOf("{module}");
-      const executable = wrapperParts[0] ?? "";
-      const configuredArgs = wrapperParts.slice(1);
-      const modulePath = c.modules[0]!;
-      const wrapperArgs = configuredArgs.flatMap((arg, index) =>
-        index === moduleToken - 1 ? [modulePath, "version", "-json"] : [arg],
-      );
-      try {
-        const { execFileSync } = await import("node:child_process");
-        const version: unknown = JSON.parse(execFileSync(executable, wrapperArgs, { encoding: "utf8", timeout: 2000 }));
-        const value =
-          version && typeof version === "object" && "terraform_version" in version
-            ? String(version.terraform_version)
-            : version && typeof version === "object" && "tofu_version" in version
-              ? String(version.tofu_version)
-              : "version available";
-        versions.wrapper = `${c.binary === "auto" ? "wrapper-selected/unknown" : c.binary} ${value}`;
-      } catch {
-        versions.wrapper = "via wrapper: version probe failed";
-      }
+    try {
+      validateWrapper(c.wrapper);
+      const result = await run(c, c.modules[0]!, "version", 2_000);
+      const version: unknown = JSON.parse(result.stdout);
+      const value =
+        version && typeof version === "object" && "terraform_version" in version
+          ? String(version.terraform_version)
+          : version && typeof version === "object" && "tofu_version" in version
+            ? String(version.tofu_version)
+            : "version available";
+      versions.wrapper = `${c.binary === "auto" ? "wrapper-selected/unknown" : c.binary} ${value}`;
+    } catch (error) {
+      versions.wrapper =
+        error instanceof Error && error.message.includes("wrapper")
+          ? "via wrapper: not probed; wrapper command cannot be represented safely"
+          : "via wrapper: version probe failed";
     }
   }
   return output({
