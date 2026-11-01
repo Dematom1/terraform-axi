@@ -48,6 +48,14 @@ describe("static backend inspection", () => {
     expect(inspectBackend(directory)).toBeUndefined();
   });
 
+  it("recognizes a backend after a string ending in an escaped backslash", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(join(directory, "main.tf"), String.raw`resource "terraform_data" "x" { input = "ends\\" }
+terraform { backend "s3" { region = "us-east-1" } }`);
+    expect(inspectBackend(directory)).toMatchObject({ type: "s3", region: "us-east-1" });
+  });
+
   it("finds a backend in a later terraform block across module files", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);

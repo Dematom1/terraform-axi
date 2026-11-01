@@ -6,12 +6,16 @@ import type { Backend } from "./rules.js";
 function maskSyntax(source: string): string {
   const chars = [...source];
   let quoted = false;
+  let escaped = false;
   for (let i = 0; i < chars.length; i++) {
     if (quoted) {
       chars[i] = " ";
-      if (source[i] === '"' && source[i - 1] !== "\\") quoted = false;
+      if (source[i] === '"' && !escaped) quoted = false;
+      escaped = source[i] === "\\" && !escaped;
+      if (source[i] !== "\\") escaped = false;
     } else if (source[i] === '"') {
       quoted = true;
+      escaped = false;
       chars[i] = " ";
     } else if (source[i] === "#" || source.startsWith("//", i) || source.startsWith("/*", i)) {
       const newline = source.indexOf("\n", i);
