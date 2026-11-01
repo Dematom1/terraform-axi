@@ -3,7 +3,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export function realModule(files: Record<string, string>, binary = "terraform"): string {
+/** Builds and inits a throwaway module. `readonlyLock: false` lets init write a lock file for registry providers. */
+export function realModule(files: Record<string, string>, binary = "terraform", readonlyLock = true): string {
   const directory = mkdtempSync(join(tmpdir(), "tfaxi-module-"));
   for (const [name, contents] of Object.entries(files)) {
     const path = join(directory, name);
@@ -17,17 +18,21 @@ export function realModule(files: Record<string, string>, binary = "terraform"):
       { mode: 0o600 },
     );
   }
-  execFileSync(binary, ["-chdir=" + directory, "init", "-input=false", "-lockfile=readonly"], {
-    encoding: "utf8",
-    timeout: 120_000,
-    env: {
-      PATH: process.env.PATH ?? "",
-      HOME: directory,
-      XDG_CONFIG_HOME: join(directory, ".config"),
-      TF_IN_AUTOMATION: "1",
-      TF_INPUT: "0",
-      CHECKPOINT_DISABLE: "1",
+  execFileSync(
+    binary,
+    ["-chdir=" + directory, "init", "-input=false", ...(readonlyLock ? ["-lockfile=readonly"] : [])],
+    {
+      encoding: "utf8",
+      timeout: 120_000,
+      env: {
+        PATH: process.env.PATH ?? "",
+        HOME: directory,
+        XDG_CONFIG_HOME: join(directory, ".config"),
+        TF_IN_AUTOMATION: "1",
+        TF_INPUT: "0",
+        CHECKPOINT_DISABLE: "1",
+      },
     },
-  });
+  );
   return directory;
 }

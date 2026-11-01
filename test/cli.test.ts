@@ -122,10 +122,10 @@ describe("terraform-axi scaffold", () => {
     }
   });
 
-  it("fails with NOT_IMPLEMENTED when drift is not implemented", () => {
+  it("fails with NOT_IMPLEMENTED when state is not implemented", () => {
     const result = spawnSync(
       process.execPath,
-      [join(root, "dist", "bin", "terraform-axi.js"), "drift", "test-module"],
+      [join(root, "dist", "bin", "terraform-axi.js"), "state", "test-module"],
       {
         encoding: "utf8",
       },

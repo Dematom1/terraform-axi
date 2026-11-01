@@ -9,7 +9,7 @@
 
 Read-only Terraform and OpenTofu inspection for agents. Output is compact [TOON](https://toonformat.dev/) and follows [AXI](https://github.com/kunchenguid/axi) principles. CI tests Linux and macOS; Windows is not currently supported.
 
-**Safety:** terraform-axi never applies or destroys. Secrets in Terraform state output are always redacted; configured wrapper text may be shown as entered. It never writes state to disk. `plan` runs `plan -json -input=false -lock=false -detailed-exitcode` (exit 2 means changes are present) and never writes a plan file (`TF_CLI_ARGS*` is not passed through, so the environment cannot add `-out`). `drift`, `doctor`, and `state` are planned for follow-up releases.
+**Safety:** terraform-axi never applies or destroys. Secrets in Terraform state output are always redacted; configured wrapper text may be shown as entered. It never writes state to disk. `plan` runs `plan -json -input=false -lock=false -detailed-exitcode` (exit 2 means changes are present) and never writes a plan file (`TF_CLI_ARGS*` is not passed through, so the environment cannot add `-out`). `drift` runs the same plan with `-refresh-only`, so it compares state with real infrastructure and never writes state. `doctor` and `state` are planned for follow-up releases.
 
 ## Install and configure
 
@@ -41,7 +41,7 @@ Each invocation that exits with a code other than 1 (runtime failure) or 2 (usag
 | `terraform-axi plan <module> --expect add=N,change=N,destroy=N`                             | Assert planned counts (any subset); exits 1 with reasons on mismatch                                                   |
 | `terraform-axi plan <module> [--binary terraform\|tofu] [--timeout seconds] [--full]`       | Run the binary directly instead of the wrapper, cap the plan time (default 1800s), or list every low-risk row          |
 | `terraform-axi plan --plan-json <file>`                                                     | Same summary from a saved `show -json <planfile>` document or `plan -json` stream                                      |
-| `terraform-axi drift <module>`                                                              | Drift summary (planned; not implemented)                                                                               |
+| `terraform-axi drift <module> [--binary terraform\|tofu]`                                   | Drift from a refresh-only plan: drifted resources and a human-only accept command                                      |
 | `terraform-axi doctor <module>`                                                             | Backend and credential diagnostics (planned; not implemented)                                                          |
 | `terraform-axi state list <module>` / `state resource <address>`                            | State inspection with secrets redacted (planned; not implemented)                                                      |
 | `terraform-axi setup [--binary ...] [--wrapper ...] [--module name] [--remove-module name]` | Configure binary, wrapper, and registered modules                                                                      |
