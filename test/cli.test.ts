@@ -1,9 +1,8 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { main } from "../src/cli.js";
 
 const root = join(import.meta.dirname, "..");
 
@@ -77,10 +76,12 @@ describe("terraform-axi scaffold", () => {
     }
   });
 
-  it("reports that plan is not implemented in the scaffold", async () => {
-    const chunks: string[] = [];
-    await main(["plan"], { write: (chunk: string) => chunks.push(chunk) });
-    expect(chunks.join("")).toContain("not implemented in scaffold");
+  it("fails with NOT_IMPLEMENTED when plan is not implemented", () => {
+    const result = spawnSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js"), "plan", "test-module"], {
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("NOT_IMPLEMENTED");
   });
 
   it("shows a wrapper version check command when no module is configured", () => {

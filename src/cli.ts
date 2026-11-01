@@ -89,17 +89,14 @@ function parseWrapperCommand(command: string): string[] | undefined {
   return args.length ? args : undefined;
 }
 const hints = ["Run `terraform-axi setup` to configure Terraform/OpenTofu", "Run `terraform-axi --help` for commands"];
+const notImplemented = () => {
+  throw new Error("NOT_IMPLEMENTED: command is not implemented in scaffold");
+};
 const commands: Record<string, AxiCliCommand<undefined>> = {
-  plan: async () => output({ status: "not implemented in scaffold", help: hints }),
-  drift: async () => output({ status: "not implemented in scaffold", help: hints }),
-  doctor: async () => output({ status: "not implemented in scaffold", help: hints }),
-  state: async (args) =>
-    output({
-      status: "not implemented in scaffold",
-      requested: args.join(" "),
-      secrets: "always redacted",
-      help: hints,
-    }),
+  plan: async () => notImplemented(),
+  drift: async () => notImplemented(),
+  doctor: async () => notImplemented(),
+  state: async () => notImplemented(),
   setup: async (args) => {
     if (args[0] === "status")
       return output({
