@@ -56,6 +56,27 @@ describe("terraform-axi scaffold", () => {
     },
   );
 
+  it("keeps saved wrapper values out of SessionStart context", () => {
+    const home = mkdtempSync(join(tmpdir(), "terraform-axi-context-"));
+    const configDir = join(home, ".config", "terraform-axi");
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      join(configDir, "config.json"),
+      JSON.stringify({ binary: "tofu", modules: ["safe-module"], wrapper: "secret-token" }),
+    );
+    try {
+      const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi-ctx.js")], {
+        encoding: "utf8",
+        env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
+      });
+      expect(output).toContain("tofu");
+      expect(output).toContain("safe-module");
+      expect(output).not.toContain("secret-token");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("reports that plan is not implemented in the scaffold", async () => {
     const chunks: string[] = [];
     await main(["plan"], { write: (chunk: string) => chunks.push(chunk) });
