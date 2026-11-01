@@ -17,12 +17,7 @@ function configuredModules(): Set<string> {
   } catch { /* No configured modules. */ }
   return new Set();
 }
-function safeModule(module: string, configured: Set<string>): boolean {
-  const parts = module.split("/");
-  if (parts.some((part) => /^(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9_-]+|AKIA[A-Z0-9]{16})$/i.test(part) || /(?:^|[_-])(?:token|secret|password|api[_-]?key)(?:$|[_-])/i.test(part))) return false;
-  if (configured.has(module)) return true;
-  return module.includes("/") && !module.startsWith("/") && parts.every((part) => part !== ".." && /^[A-Za-z0-9_.-]+$/.test(part));
-}
+
 
 function record(input: unknown): Session | undefined {
   if (!input || typeof input !== "object") return;
@@ -48,7 +43,7 @@ function record(input: unknown): Session | undefined {
         if (typeof command !== "string") continue;
         for (const match of command.matchAll(/(?:^|[;&|]\s*)terraform-axi\s+(plan|drift|state|doctor)\s+([^\s;&|]+)/g)) {
           commands[match[1]!] = (commands[match[1]!] ?? 0) + 1;
-          if (safeModule(match[2]!, configured)) modules[match[2]!] = (modules[match[2]!] ?? 0) + 1;
+          if (configured.has(match[2]!)) modules[match[2]!] = (modules[match[2]!] ?? 0) + 1;
         }
       }
     }
