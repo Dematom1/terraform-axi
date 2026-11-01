@@ -76,6 +76,8 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       { name: "--module", repeatable: true },
       { name: "--remove-module", repeatable: true },
     ]);
+    if (parsed.command !== undefined || parsed.positional.length)
+      throw new CliError("VALIDATION_ERROR: unexpected setup argument");
     const settings = config();
     if (parsed.values["--binary"]?.[0]) settings.binary = parsed.values["--binary"][0] as Config["binary"];
     if (parsed.values["--wrapper"]?.[0]) {
