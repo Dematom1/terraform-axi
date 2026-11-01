@@ -55,7 +55,7 @@ describe("static backend inspection", () => {
     directories.push(directory);
     writeFileSync(
       join(directory, "main.tf"),
-      `terraform {}\nresource "terraform_data" "x" { input = "backend \\\"s3\\\" { region = \\\"x\\\" } // #" }`,
+      `terraform {}\nresource "terraform_data" "x" { input = "backend "s3" { region = "x" } // #" }`,
     );
     expect(inspectBackend(directory)).toBeUndefined();
   });
@@ -65,7 +65,7 @@ describe("static backend inspection", () => {
     directories.push(directory);
     writeFileSync(
       join(directory, "main.tf"),
-      'resource "terraform_data" "x" { input = "terraform { backend \\\"s3\\\" { region = \\\"x\\\" } }" }',
+      'resource "terraform_data" "x" { input = "terraform { backend "s3" { region = "x" } }" }',
     );
     expect(inspectBackend(directory)).toBeUndefined();
   });
