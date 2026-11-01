@@ -114,7 +114,7 @@ export async function run(
     } else argv = versionArgs;
   }
   try {
-    assertAllowed(argv);
+    assertAllowed(versionArgs);
     const result = await execute(file, argv, {
       timeout: timeout ?? 10_000,
       killSignal: "SIGKILL",
@@ -126,7 +126,7 @@ export async function run(
     let failure = error;
     if (!config.wrapper && config.binary === "auto" && file === "terraform") {
       try {
-        assertAllowed(argv);
+        assertAllowed(versionArgs);
         const result = await execute("tofu", argv, {
           timeout: timeout ?? 10_000,
           killSignal: "SIGKILL",

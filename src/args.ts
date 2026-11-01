@@ -21,7 +21,7 @@ export function parseArgs(
       const spec = specs.get(name);
       if (!spec) throw new UsageError(`unknown flag: ${name}`);
       const value = equal < 0 ? argv[++i] : arg.slice(equal + 1);
-      if (value === undefined || value === "" || value.startsWith("--") || /^-\d/.test(value))
+      if (value === undefined || value === "" || (equal < 0 && value.startsWith("--")))
         throw new UsageError(`missing or invalid value for ${name}`);
       if (spec.values && !spec.values.includes(value)) throw new UsageError(`invalid value for ${name}: ${value}`);
       const prior = values[name] ?? [];

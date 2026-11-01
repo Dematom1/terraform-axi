@@ -57,7 +57,9 @@ jobs:
           TF_TOKEN_app_terraform_io: ""
       - run: npm pack
       - run: |
-          mkdir packed && tar -xzf terraform-axi-*.tgz -C packed
-          node packed/package/dist/bin/terraform-axi.js --version
-          node packed/package/dist/bin/terraform-axi.js --help
-          node packed/package/dist/bin/terraform-axi.js
+          prefix="$RUNNER_TEMP/packed"
+          mkdir -p "$prefix"
+          npm install --prefix "$prefix" ./terraform-axi-*.tgz
+          "$prefix/node_modules/.bin/terraform-axi" --version
+          "$prefix/node_modules/.bin/terraform-axi" --help
+          "$prefix/node_modules/.bin/terraform-axi"

@@ -7,6 +7,8 @@ description: Read-only Terraform and OpenTofu CLI scaffold; plan, drift, doctor,
 
 Use terraform-axi for read-only infrastructure inspection. Never apply or destroy.
 
+See the [README command reference](https://github.com/Dematom1/terraform-axi#commands) for the full command list.
+
 ## Commands
 
 | Command                                                                                     | Purpose                                                               |

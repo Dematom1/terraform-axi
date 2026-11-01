@@ -54,6 +54,11 @@ describe("runner seam", () => {
     expect(invocation.env.AWS_SECRET_ACCESS_KEY).toBe("fixture-secret");
     expect(invocation.env.TF_IN_AUTOMATION).toBe("1");
   });
+  it("does not treat wrapper words or module names as Terraform operations", async () => {
+    const wrapper = executable('printf \'{"terraform_version":"1.2.3"}\\n\'');
+    const result = await run(config(`${wrapper} init {module}`), "test");
+    expect(result.stdout).toContain("1.2.3");
+  });
   it("keeps a wrapper module argument intact and passes the environment through", async () => {
     const log = join(dir, "argv.json");
     const envLog = join(dir, "env.txt");

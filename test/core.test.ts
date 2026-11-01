@@ -19,6 +19,7 @@ describe("core boundaries", () => {
     ]) {
       expect(() => parseArgs(argv, options)).toThrow(UsageError);
     }
+    expect(parseArgs(["--module=--binary", "--module=-5"], options).values["--module"]).toEqual(["--binary", "-5"]);
   });
   it("preserves a module with spaces as one wrapper argument", () => {
     expect(wrapperArgs("just tf {module}", "infra/a b", ["plan", "-json"])).toEqual([
