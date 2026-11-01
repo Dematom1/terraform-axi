@@ -80,6 +80,7 @@ export function rules(
     const host = backend.endpointHost?.toLowerCase();
     const b2 = host === "backblazeb2.com" || host?.endsWith(".backblazeb2.com") === true;
     const awsKeyPair = present("AWS_ACCESS_KEY_ID") && present("AWS_SECRET_ACCESS_KEY");
+    const envCredentialsUsed = !backend.inlineCredentials;
     if (backend.inlineCredentials)
       findings.push({
         id: "inline-backend-credentials",
@@ -88,7 +89,7 @@ export function rules(
           "Backend credentials are set in configuration (value hidden); they take precedence over environment credentials.",
         next: "Move credentials to the environment or a wrapper.",
       });
-    if (b2 && (present("B2_APPLICATION_KEY_ID") || present("B2_APPLICATION_KEY")) && !awsKeyPair)
+    if (envCredentialsUsed && b2 && (present("B2_APPLICATION_KEY_ID") || present("B2_APPLICATION_KEY")) && !awsKeyPair)
       findings.push({
         id: "b2-keys-invisible",
         severity: "fail",
@@ -96,7 +97,7 @@ export function rules(
           "The s3 backend ignores B2_APPLICATION_KEY_ID/B2_APPLICATION_KEY. Export AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY with the B2 application key ID and key (or map them in your wrapper).",
         next: "Map the B2 application key ID and key to AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.",
       });
-    if (b2 && (present("B2_APPLICATION_KEY_ID") || present("B2_APPLICATION_KEY")) && awsKeyPair)
+    if (envCredentialsUsed && b2 && (present("B2_APPLICATION_KEY_ID") || present("B2_APPLICATION_KEY")) && awsKeyPair)
       findings.push({
         id: "aws-overrides-b2",
         severity: "warn",
@@ -104,7 +105,7 @@ export function rules(
           "The backend authenticates with AWS_ACCESS_KEY_ID; B2_* is used only by the b2 provider/CLI. If these hold different keys (e.g. a leftover AWS session), the backend gets 403 InvalidAccessKeyId.",
         next: "Verify the AWS_* credentials are the intended B2 application key pair.",
       });
-    if (b2 && present("AWS_SESSION_TOKEN"))
+    if (envCredentialsUsed && b2 && present("AWS_SESSION_TOKEN"))
       findings.push({
         id: "aws-session-token-on-b2",
         severity: "warn",
@@ -112,7 +113,7 @@ export function rules(
           "B2 application keys use no session token; a leftover AWS session token can cause a rejected signature.",
         next: "Unset AWS_SESSION_TOKEN for this module.",
       });
-    if (present("AWS_PROFILE") && present("AWS_ACCESS_KEY_ID"))
+    if (envCredentialsUsed && present("AWS_PROFILE") && awsKeyPair)
       findings.push({
         id: "aws-profile-shadowed",
         severity: "info",

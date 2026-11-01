@@ -36,13 +36,15 @@ const rules: Rule[] = [
     next: "Check the bucket name and endpoint region.",
   },
   {
-    pattern: /connection refused|ENOTFOUND|name or service not known|timeout|timed out/i,
+    pattern:
+      /connection refused|ENOTFOUND|name or service not known|(?:connection|endpoint).{0,80}(?:timeout|timed out)|(?:timeout|timed out).{0,80}(?:connection|endpoint)/i,
     id: "endpoint-unreachable",
     cause: "The configured endpoint is unreachable.",
     next: "Check DNS, network access, and the endpoint host.",
   },
   {
-    pattern: /x-amz-checksum-|x-amz-sdk-checksum-algorithm|checksum.*(?:unsupported|not support|reject)/i,
+    pattern:
+      /(?=.*(?:x-amz-checksum-[\w-]+|x-amz-sdk-checksum-algorithm))(?=.*(?:unsupported|not supported|reject(?:ed|ion)?|invalid header))/i,
     id: "checksum-rejected",
     cause: "The S3-compatible endpoint rejected an AWS checksum header.",
     next: "Try skip_s3_checksum or set AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION to when_required.",

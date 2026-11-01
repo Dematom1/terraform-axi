@@ -28,6 +28,26 @@ describe("doctor credential rules", () => {
     expect(result.findings.map(({ id }) => id)).not.toContain("aws-overrides-b2");
   });
 
+  it("ignores environment credential findings when inline credentials take precedence", () => {
+    const result = rules(
+      { B2_APPLICATION_KEY_ID: "id", AWS_SESSION_TOKEN: "token", AWS_PROFILE: "profile" },
+      { type: "s3", endpointHost: "s3.backblazeb2.com", flags: {}, inlineCredentials: true },
+    );
+    const ids = result.findings.map(({ id }) => id);
+    expect(ids).toContain("inline-backend-credentials");
+    expect(ids).not.toContain("b2-keys-invisible");
+    expect(ids).not.toContain("aws-session-token-on-b2");
+    expect(ids).not.toContain("aws-profile-shadowed");
+  });
+
+  it("requires a complete AWS key pair before reporting a profile shadow", () => {
+    const result = rules(
+      { AWS_PROFILE: "profile", AWS_ACCESS_KEY_ID: "id" },
+      { type: "s3", flags: {}, inlineCredentials: false },
+    );
+    expect(result.findings.map(({ id }) => id)).not.toContain("aws-profile-shadowed");
+  });
+
   it("recognizes configured regions and only actual B2 hostnames", () => {
     const backend = {
       type: "s3",
@@ -56,8 +76,12 @@ describe("doctor credential rules", () => {
       ["AccessDenied", "lack capability"],
       ["NoSuchBucket", "bucket name"],
       ["connection refused", "unreachable"],
-      ["unsupported x-amz-checksum-sha256", "checksum header"],
+      ["endpoint request timed out", "unreachable"],
+      ["unsupported x-amz-checksum-sha256 header", "checksum header"],
     ];
     for (const [text, cause] of fixtures) expect(explain(text)?.cause).toContain(cause);
+    expect(explain("Error acquiring the state lock: timeout after 30s")).toBeUndefined();
+    expect(explain("Request timed out")).toBeUndefined();
+    expect(explain("x-amz-checksum-sha256 mismatch")).toBeUndefined();
   });
 });
