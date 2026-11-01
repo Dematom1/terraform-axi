@@ -29,7 +29,7 @@ describe("terraform-axi scaffold", () => {
 
       const fakeBin = mkdtempSync(join(tmpdir(), "release-check-test-"));
       const outputPath = join(fakeBin, "github-output");
-      writeFileSync(join(fakeBin, "gh"), '#!/bin/sh\nprintf \'%s\' "$GH_FIXTURE"\n', { mode: 0o700 });
+      writeFileSync(join(fakeBin, "gh"), "#!/bin/sh\nprintf '%s' \"$GH_FIXTURE\"\n", { mode: 0o700 });
       const checkWorkflow = (commits: string) => {
         writeFileSync(outputPath, "");
         execFileSync("bash", ["-e", "-c", contract.releaseRun], {

@@ -35,7 +35,26 @@ function output(value: unknown): string {
   return encode(value);
 }
 function parseWrapperCommand(command: string): string[] | undefined {
-  const forbidden = new Set([";", "&", "|", "<", ">", "$", "`", "(", ")", "{", "}", "*", "?", "!", "[", "]", "\n", "\r"]);
+  const forbidden = new Set([
+    ";",
+    "&",
+    "|",
+    "<",
+    ">",
+    "$",
+    "`",
+    "(",
+    ")",
+    "{",
+    "}",
+    "*",
+    "?",
+    "!",
+    "[",
+    "]",
+    "\n",
+    "\r",
+  ]);
   if ([...command.replaceAll("{module}", "")].some((char) => forbidden.has(char))) return undefined;
   const args: string[] = [];
   let token = "";
@@ -53,7 +72,7 @@ function parseWrapperCommand(command: string): string[] | undefined {
       if (char === quote) quote = "";
       else token += char;
       started = true;
-    } else if (char === "'" || char === '\"') {
+    } else if (char === "'" || char === '"') {
       quote = char;
       started = true;
     } else if (/\s/.test(char)) {
@@ -171,9 +190,7 @@ async function home(): Promise<string> {
             );
       try {
         const { execFileSync } = await import("node:child_process");
-        const version: unknown = JSON.parse(
-          execFileSync(executable, wrapperArgs, { encoding: "utf8", timeout: 2000 }),
-        );
+        const version: unknown = JSON.parse(execFileSync(executable, wrapperArgs, { encoding: "utf8", timeout: 2000 }));
         const value =
           version && typeof version === "object" && "terraform_version" in version
             ? String(version.terraform_version)

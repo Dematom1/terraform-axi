@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import process from "node:process";
 
 export function isReleaseBotOnly(commits) {
-  return commits.length > 0 && commits.every(
-    (commit) =>
-      commit.length === 2 &&
-      commit[0] === "release-please[bot]" &&
-      commit[1] === "release-please[bot]",
+  return (
+    commits.length > 0 &&
+    commits.every(
+      (commit) => commit.length === 2 && commit[0] === "release-please[bot]" && commit[1] === "release-please[bot]",
+    )
   );
 }
 
