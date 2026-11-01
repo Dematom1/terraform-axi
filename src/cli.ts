@@ -33,12 +33,12 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     if (!module) throw new Error("Usage: terraform-axi plan <module> [--expect add=N,change=N,destroy=N]");
     const c = config();
     const binary = c.binary === "auto" ? "terraform" : c.binary;
-    const lines = execFileSync(c.wrapper ?? binary, [...(c.wrapper ? [binary] : []), "plan", "-input=false", "-no-color", "-json"], { cwd: module, encoding: "utf8", timeout: 120_000 }).trim().split("\\n");
+    const lines = execFileSync(c.wrapper ?? binary, [...(c.wrapper ? [binary] : []), "plan", "-input=false", "-no-color", "-json"], { cwd: module, encoding: "utf8", timeout: 120_000 }).trim().split(/\r?\n/).filter(Boolean);
     const changes = { add: 0, change: 0, destroy: 0, replace: 0 };
     for (const line of lines) {
       const event: unknown = JSON.parse(line);
       if (!event || typeof event !== "object" || !("type" in event) || event.type !== "planned_change" || !("change" in event)) continue;
-      const actions = (event.change as { action?: unknown }).action;
+      const actions = (event.change as { actions?: unknown }).actions;
       if (!Array.isArray(actions)) continue;
       if (actions.includes("create")) changes.add++;
       if (actions.includes("update")) changes.change++;
@@ -54,12 +54,23 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     return output(changes);
   },
   drift: async () => output({ status: "not implemented in scaffold", help: hints }),
-  doctor: async () => {
+  doctor: async (args) => {
     const c = config();
     const binary = c.binary === "auto" ? "terraform" : c.binary;
     let binaryAvailable = false;
     try { execFileSync(c.wrapper ?? binary, [...(c.wrapper ? [binary] : []), "version"], { stdio: "ignore", timeout: 2000 }); binaryAvailable = true; } catch { /* reported below */ }
-    return output({ binary: binaryAvailable ? "reachable" : "not found", backend: "not checked (no module selected)", credentials: Object.keys(process.env).filter((key) => /^(AWS|B2)_/.test(key)), precedence: "AWS_* takes precedence over B2_*" });
+    let backend = "not checked (no module selected)";
+    if (args[0] && binaryAvailable) {
+      try {
+        execFileSync(c.wrapper ?? binary, [...(c.wrapper ? [binary] : []), "init", "-backend-only", "-input=false", "-no-color"], { cwd: args[0], stdio: "pipe", timeout: 120_000 });
+        backend = "reachable";
+      } catch (error) {
+        backend = `unreachable: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+    const awsCredentials = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"].some((key) => Boolean(process.env[key]));
+    const b2Credentials = ["B2_APPLICATION_KEY_ID", "B2_APPLICATION_KEY"].some((key) => Boolean(process.env[key]));
+    return output({ binary: binaryAvailable ? "reachable" : "not found", backend, credentials: { aws: awsCredentials, b2: b2Credentials }, precedence: awsCredentials ? "AWS_*" : b2Credentials ? "B2_*" : "none" });
   },
   state: async (args) =>
     output({
