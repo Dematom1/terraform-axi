@@ -309,6 +309,21 @@ describe("plan <module> through the configured runner", () => {
     expect(report).toMatchObject({ status: "error", exit_code: 1 });
   });
 
+  it("preserves scrubbed non-JSON stdout when a failed plan has no error diagnostic", () => {
+    withFakeWrapper();
+    const secret = "stdout-secret-value";
+    const fixture = join(home, "stdout.jsonl");
+    writeFileSync(fixture, `backend ${secret} failed\\n${JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } })}\\n`);
+    const { status, report, stdout } = tfaxi(["plan", "m"], {
+      TF_AXI_FIXTURE: fixture,
+      TF_AXI_EXIT_CODE: "1",
+      AWS_SECRET_ACCESS_KEY: secret,
+    });
+    expect(status).toBe(1);
+    expect(report.stdout).toEqual(["backend [redacted] failed"]);
+    expect(stdout).not.toContain(secret);
+  });
+
   it("fails a wrapper error that prints no plan, showing its stderr", () => {
     withFakeWrapper();
     const { status, report } = tfaxi(["plan", "m"], {

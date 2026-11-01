@@ -105,6 +105,7 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
   let events: PlanEvents;
   let source: Record<string, string>;
   let stderr = "";
+  let stdout = "";
   let exitCode = 0;
   if (planJson) {
     let text: string;
@@ -127,7 +128,8 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
       exitCodes: [1, 2],
       maxBuffer: 256 * 1024 * 1024,
     });
-    events = parsePlanEvents(result.stdout);
+    stdout = result.stdout;
+    events = parsePlanEvents(stdout);
     source = { module: module! };
     if (runConfig.wrapper) source.via = "wrapper";
     if (result.fallbackReason) source.note = result.fallbackReason;
@@ -153,6 +155,18 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
       .split("\n")
       .slice(-5)
       .map((line) => clip(scrub(line)));
+  if (!ok && !events.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+    const lines = stdout.split(/\r?\n/).filter((line) => {
+      if (!line.trim()) return false;
+      try {
+        JSON.parse(line);
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    if (lines.length) report.stdout = lines.slice(-5).map((line) => clip(scrub(line)));
+  }
   if (!ok) throw new ReportError(report);
   return report;
 }
