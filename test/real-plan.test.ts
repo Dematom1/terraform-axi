@@ -17,6 +17,8 @@ const which = (binary: string) => {
 };
 const binaries = (["terraform", "tofu"] as const).filter((binary) => which(binary));
 
+if (binaries.length === 0) it.skip("requires Terraform or OpenTofu", () => {});
+
 // Prior state is written by hand so the plan has something to update, replace, and destroy; nothing is applied.
 const resource = (name: string, attributes: Record<string, unknown>) => ({
   mode: "managed",
