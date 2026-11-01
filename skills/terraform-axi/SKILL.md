@@ -1,6 +1,6 @@
 ---
 name: terraform-axi
-description: Read-only Terraform and OpenTofu CLI; state list infers resource types by default, while --full reads state JSON to resolve them.
+description: Read-only Terraform and OpenTofu CLI; plan risk summaries, --expect count assertions, and drift detection. Doctor and state commands are planned.
 ---
 
 # terraform-axi
@@ -19,9 +19,9 @@ See the [README command reference](https://github.com/Dematom1/terraform-axi#com
 | `terraform-axi plan <module> [--binary terraform\|tofu] [--timeout seconds] [--full]`       | Run the binary directly instead of the wrapper, cap the plan time (default 1800s), or list every low-risk row          |
 | `terraform-axi plan --plan-json <file>`                                                     | Same summary from a saved `show -json <planfile>` document or `plan -json` stream                                      |
 | `terraform-axi drift <module> [--binary terraform\|tofu]`                                   | Drift from a refresh-only plan: drifted resources and a human-only accept command                                      |
-| `terraform-axi doctor <module>`                                                             | Backend and credential diagnostics (planned; not implemented)                                                          |
-| `terraform-axi state list <module> [--full]`                                                | List resource addresses with inferred types; `--full` reads state JSON to resolve resource types                       |
-| `terraform-axi state resource <module> <address> [--full]`                                  | Inspect one state resource with secrets redacted; `--full` disables the default 200-character string limit             |
+| `terraform-axi doctor [module]`                                                             | Static backend and credential diagnostics; no init or state access                                                     |
+| `terraform-axi doctor --explain TEXT` or `--explain -`                                      | Explain a common S3 or Backblaze B2 diagnostic                                                                         |
+| `terraform-axi state list <module>` / `state resource <address>`                            | State inspection with secrets redacted (planned; not implemented)                                                      |
 | `terraform-axi setup [--binary ...] [--wrapper ...] [--module name] [--remove-module name]` | Configure binary, wrapper, and registered modules                                                                      |
 | `terraform-axi setup status`                                                                | Inspect current settings and managed hooks                                                                             |
 | `terraform-axi setup hooks` / `setup uninstall`                                             | Install or remove terraform-axi-managed user-level SessionStart hooks                                                  |
