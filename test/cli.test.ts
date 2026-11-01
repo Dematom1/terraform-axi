@@ -26,8 +26,9 @@ describe("terraform-axi scaffold", () => {
         encoding: "utf8",
         env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
       });
-      expect(output).toContain("terraform: 9.9.9");
-      expect(output).not.toContain("tofu:");
+      expect(output).toContain(`wrapper: via wrapper: not probed; check manually with: ${wrapper}`);
+      expect(output).not.toContain("versions.auto");
+      expect(output).not.toContain("9.9.9");
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

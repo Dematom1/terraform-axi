@@ -93,28 +93,16 @@ const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};
-  const binaries = c.wrapper ? [c.binary] : c.binary === "auto" ? ["terraform", "tofu"] : [c.binary];
+  if (c.wrapper) {
+    versions.wrapper = `via wrapper: not probed; check manually with: ${c.wrapper}`;
+  }
+  const binaries = c.wrapper ? [] : c.binary === "auto" ? ["terraform", "tofu"] : [c.binary];
   for (const binary of binaries) {
     try {
       const { execFileSync } = await import("node:child_process");
-      const args = ["version", "-json"];
-      const wrapperParts = c.wrapper?.trim().split(/\s+/) ?? [];
-      const moduleToken = wrapperParts.indexOf("{module}");
-      const wrapperArgs =
-        moduleToken < 0
-          ? [...wrapperParts.slice(1), ...args]
-          : wrapperParts.slice(1).map((arg, index) => (index === moduleToken - 1 ? "version" : arg)).concat("-json");
-      const rawVersion = c.wrapper
-        ? execFileSync(wrapperParts[0] ?? "", wrapperArgs, { encoding: "utf8", timeout: 2000 })
-        : execFileSync(binary, args, { encoding: "utf8", timeout: 2000 });
+      const rawVersion = execFileSync(binary, ["version", "-json"], { encoding: "utf8", timeout: 2000 });
       const version: unknown = JSON.parse(rawVersion);
-      const detectedBinary =
-        c.wrapper && version && typeof version === "object" && "tofu_version" in version
-          ? "tofu"
-          : c.wrapper && c.binary === "auto"
-            ? "terraform"
-            : binary;
-      versions[detectedBinary] =
+      versions[binary] =
         version && typeof version === "object" && "terraform_version" in version
           ? String(version.terraform_version)
           : version && typeof version === "object" && "tofu_version" in version
