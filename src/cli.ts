@@ -34,6 +34,41 @@ function config(): Config {
 function output(value: unknown): string {
   return encode(value);
 }
+function parseWrapperCommand(command: string): string[] | undefined {
+  const forbidden = new Set([";", "&", "|", "<", ">", "$", "`", "(", ")", "{", "}", "*", "?", "!", "[", "]", "\n", "\r"]);
+  if ([...command.replaceAll("{module}", "")].some((char) => forbidden.has(char))) return undefined;
+  const args: string[] = [];
+  let token = "";
+  let quote = "";
+  let started = false;
+  let escaped = false;
+  for (const char of command) {
+    if (escaped) {
+      token += char;
+      escaped = false;
+      started = true;
+    } else if (char === "\\") {
+      escaped = true;
+    } else if (quote) {
+      if (char === quote) quote = "";
+      else token += char;
+      started = true;
+    } else if (char === "'" || char === '\"') {
+      quote = char;
+      started = true;
+    } else if (/\s/.test(char)) {
+      if (started) args.push(token);
+      token = "";
+      started = false;
+    } else {
+      token += char;
+      started = true;
+    }
+  }
+  if (quote || escaped) return undefined;
+  if (started) args.push(token);
+  return args.length ? args : undefined;
+}
 const hints = ["Run `terraform-axi setup` to configure Terraform/OpenTofu", "Run `terraform-axi --help` for commands"];
 const commands: Record<string, AxiCliCommand<undefined>> = {
   plan: async () => output({ status: "not implemented in scaffold", help: hints }),
@@ -115,30 +150,39 @@ async function home(): Promise<string> {
     }
   }
   if (c.wrapper && c.modules.length > 0) {
-    const wrapperParts = c.wrapper.trim().split(/\s+/);
-    const executable = wrapperParts[0] ?? "";
-    const configuredArgs = wrapperParts.slice(1);
-    const moduleToken = configuredArgs.indexOf("{module}");
-    const wrapperArgs =
-      moduleToken < 0
-        ? [...configuredArgs, "version", "-json"]
-        : configuredArgs.flatMap((arg, index) =>
-            index === moduleToken ? [c.modules[0], "version", "-json"] : [arg],
-          );
-    try {
-      const { execFileSync } = await import("node:child_process");
-      const version: unknown = JSON.parse(
-        execFileSync(executable, wrapperArgs, { encoding: "utf8", timeout: 2000 }),
-      );
-      const value =
-        version && typeof version === "object" && "terraform_version" in version
-          ? String(version.terraform_version)
-          : version && typeof version === "object" && "tofu_version" in version
-            ? String(version.tofu_version)
-            : "version available";
-      versions.wrapper = `${c.binary === "auto" ? "wrapper-selected/unknown" : c.binary} ${value}`;
-    } catch {
-      versions.wrapper = "via wrapper: version probe failed";
+    const wrapperParts = parseWrapperCommand(c.wrapper);
+    if (
+      !wrapperParts ||
+      wrapperParts[0] === "{module}" ||
+      wrapperParts.filter((part) => part === "{module}").length > 1 ||
+      wrapperParts.some((part) => part !== "{module}" && part.includes("{module}"))
+    ) {
+      versions.wrapper = "via wrapper: not probed; wrapper command cannot be represented safely";
+    } else {
+      const moduleToken = wrapperParts.indexOf("{module}");
+      const executable = wrapperParts[0] ?? "";
+      const configuredArgs = wrapperParts.slice(1);
+      const wrapperArgs =
+        moduleToken < 0
+          ? [...configuredArgs, "version", "-json"]
+          : configuredArgs.flatMap((arg, index) =>
+              index === moduleToken - 1 ? [c.modules[0], "version", "-json"] : [arg],
+            );
+      try {
+        const { execFileSync } = await import("node:child_process");
+        const version: unknown = JSON.parse(
+          execFileSync(executable, wrapperArgs, { encoding: "utf8", timeout: 2000 }),
+        );
+        const value =
+          version && typeof version === "object" && "terraform_version" in version
+            ? String(version.terraform_version)
+            : version && typeof version === "object" && "tofu_version" in version
+              ? String(version.tofu_version)
+              : "version available";
+        versions.wrapper = `${c.binary === "auto" ? "wrapper-selected/unknown" : c.binary} ${value}`;
+      } catch {
+        versions.wrapper = "via wrapper: version probe failed";
+      }
     }
   }
   return output({
