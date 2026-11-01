@@ -170,7 +170,7 @@ async function home(): Promise<string> {
     if (
       !wrapperParts ||
       wrapperParts[0] === "{module}" ||
-      wrapperParts.filter((part) => part === "{module}").length > 1 ||
+      wrapperParts.filter((part) => part === "{module}").length !== 1 ||
       wrapperParts.some((part) => part !== "{module}" && part.includes("{module}"))
     ) {
       versions.wrapper = "via wrapper: not probed; wrapper command cannot be represented safely";
@@ -179,12 +179,9 @@ async function home(): Promise<string> {
       const executable = wrapperParts[0] ?? "";
       const configuredArgs = wrapperParts.slice(1);
       const modulePath = c.modules[0]!;
-      const wrapperArgs =
-        moduleToken < 0
-          ? [...configuredArgs, "version", "-json"]
-          : configuredArgs.flatMap((arg, index) =>
-              index === moduleToken - 1 ? [modulePath, "version", "-json"] : [arg],
-            );
+      const wrapperArgs = configuredArgs.flatMap((arg, index) =>
+        index === moduleToken - 1 ? [modulePath, "version", "-json"] : [arg],
+      );
       try {
         const { execFileSync } = await import("node:child_process");
         const version: unknown = JSON.parse(execFileSync(executable, wrapperArgs, { encoding: "utf8", timeout: 2000 }));

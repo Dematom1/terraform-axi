@@ -15,25 +15,27 @@ describe("terraform-axi scaffold", () => {
       const jobs = yaml.load(fs.readFileSync(process.argv[1], "utf8")).jobs;
       const build = jobs.build;
       const publish = jobs.publish;
+      const artifact = build.steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"));
+      const download = publish.steps.find((step) => step.uses?.startsWith("actions/download-artifact@"));
       process.stdout.write(JSON.stringify({
-        npmSetup: build.steps.some((step) => step.run?.includes("npm@11.15.0")),
-        npmArtifact: build.steps.some((step) => step.uses?.includes("upload-artifact") && step.with?.path?.includes("npm-cli.tgz")),
+        buildHasNoOidc: build.permissions?.["id-token"] !== "write",
         publishHasOidc: publish.permissions["id-token"] === "write",
-        publishExtractsCli: publish.steps.some((step) => step.run?.includes("tar -xzf npm-cli.tgz")),
-        publishUsesCli: publish.steps.some((step) => step.run?.includes("npm-cli.js stage publish")),
-        publishInstallsNpm: publish.steps.some((step) => step.run?.includes("npm install")),
+        packageArtifact: artifact?.with?.name === "package" && artifact.with.path.includes("terraform-axi-*.tgz") && artifact.with.path.includes("npm-cli.tgz"),
+        matchingDownload: download?.with?.name === artifact?.with?.name,
+        buildStepOrder: build.steps.indexOf(artifact) > 0,
+        publishSteps: publish.steps.map((step) => step.name ?? step.uses ?? "run"),
       }));
     `;
     const result: Record<string, boolean> = JSON.parse(
       execFileSync(process.execPath, ["-e", inspectWorkflow, workflowPath], { cwd: root, encoding: "utf8" }),
     );
     expect(result).toEqual({
-      npmSetup: true,
-      npmArtifact: true,
+      buildHasNoOidc: true,
       publishHasOidc: true,
-      publishExtractsCli: true,
-      publishUsesCli: true,
-      publishInstallsNpm: false,
+      packageArtifact: true,
+      matchingDownload: true,
+      buildStepOrder: true,
+      publishSteps: ["Validate manual publish ref", "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020", "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333", "run", "Skip if version already exists", "Stage package for approval"],
     });
   });
 
@@ -167,6 +169,27 @@ describe("terraform-axi scaffold", () => {
       });
       expect(output).toContain("wrapper: wrapper-selected/unknown 9.9.9");
       expect(output).not.toContain("versions.auto");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("does not probe a configured wrapper without a module placeholder", () => {
+    const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
+    const configDir = join(home, ".config", "terraform-axi");
+    mkdirSync(configDir, { recursive: true });
+    const marker = join(home, "executed");
+    const wrapper = join(home, "wrapper");
+    writeFileSync(wrapper, `#!/bin/sh\ntouch "${marker}"\nprintf '{"terraform_version":"9.9.9"}\\n'\n`, { mode: 0o700 });
+    writeFileSync(join(configDir, "config.json"), JSON.stringify({ binary: "auto", modules: ["module-a"], wrapper }));
+    try {
+      const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
+        encoding: "utf8",
+        env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
+      });
+      expect(output).toContain("via wrapper: not probed; wrapper command cannot be represented safely");
+      expect(existsSync(marker)).toBe(false);
+      expect(output).not.toContain("9.9.9");
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
