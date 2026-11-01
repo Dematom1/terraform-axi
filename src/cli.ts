@@ -186,11 +186,10 @@ async function home(): Promise<string> {
     }
   }
   const session = lastSession();
-  const mostUsed = Object.entries(session?.modules ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0];
   return output({
     modules: c.modules.length ? c.modules : "none configured",
     last_session: session,
-    next_action: c.modules.length ? `plan ${mostUsed ?? c.modules[0]}` : "setup --module",
+    next_action: "setup status",
     binary: c.binary,
     wrapper: c.wrapper ?? "none",
     versions,
