@@ -38,6 +38,14 @@ describe("static backend inspection", () => {
     expect(inspectBackend(directory)).toBeUndefined();
   });
 
+  it("finds a backend in a later terraform block across module files", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(join(directory, "main.tf"), "terraform {}");
+    writeFileSync(join(directory, "backend.tf"), 'terraform { backend "s3" { region = "us-east-1" } }');
+    expect(inspectBackend(directory)).toMatchObject({ type: "s3", region: "us-east-1" });
+  });
+
   it("returns no backend when a module has no static backend block", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);

@@ -41,15 +41,20 @@ export function inspectBackend(module: string): Backend | undefined {
       return readFileSync(path, "utf8");
     });
   const source = withoutComments(sources.join("\n"));
-  const terraformStart = source.search(/\bterraform\s*\{/);
-  if (terraformStart < 0) return undefined;
-  const terraform = blockBody(source, terraformStart);
-  const backendStart = terraform?.search(/\bbackend\s+"[\w-]+"\s*\{/);
-  if (!terraform || backendStart === undefined || backendStart < 0) return undefined;
-  const block = terraform.slice(backendStart).match(/^\s*backend\s+"([\w-]+)"\s*\{/);
-  if (!block) return undefined;
-  const body = blockBody(terraform.slice(backendStart), 0);
-  if (!body) return undefined;
+  const terraformBlocks = /\bterraform\s*\{/g;
+  let block: RegExpMatchArray | null = null;
+  let body: string | undefined;
+  for (const match of source.matchAll(terraformBlocks)) {
+    const terraform = blockBody(source, match.index!);
+    if (!terraform) continue;
+    const backendStart = terraform.search(/\bbackend\s+"[\w-]+"\s*\{/);
+    if (backendStart < 0) continue;
+    const backend = terraform.slice(backendStart);
+    block = backend.match(/^\s*backend\s+"([\w-]+)"\s*\{/);
+    body = block ? blockBody(backend, 0) : undefined;
+    if (block && body) break;
+  }
+  if (!block || !body) return undefined;
   const value = (name: string) => body.match(new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`))?.[1];
   const flags: Backend["flags"] = {};
   for (const name of [
