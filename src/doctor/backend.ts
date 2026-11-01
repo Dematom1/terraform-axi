@@ -3,6 +3,25 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { Backend } from "./rules.js";
 
+function withoutComments(source: string): string {
+  return source.replace(/"(?:\\.|[^"\\])*"|#.*|\/\/[^:\n].*|\/\*[\s\S]*?\*\//g, (match) =>
+    match.startsWith('"') ? match : " ".repeat(match.length),
+  );
+}
+
+function blockBody(source: string, start: number): string | undefined {
+  const open = source.indexOf("{", start);
+  if (open < 0) return undefined;
+  let depth = 1;
+  let quoted = false;
+  for (let i = open + 1; i < source.length; i++) {
+    if (source[i] === '"' && source[i - 1] !== "\\") quoted = !quoted;
+    else if (!quoted && source[i] === "{") depth++;
+    else if (!quoted && source[i] === "}" && --depth === 0) return source.slice(open + 1, i);
+  }
+  return undefined;
+}
+
 export function inspectBackend(module: string): Backend | undefined {
   const directory = realpathSync(resolve(module));
   const unsafePath = resolve(homedir(), "Code", "infrastructure");
@@ -21,12 +40,16 @@ export function inspectBackend(module: string): Backend | undefined {
       if (protectedPath(path)) throw new Error("refusing to inspect the protected infrastructure directory");
       return readFileSync(path, "utf8");
     });
-  const source = sources.join("\n").replace(/#.*|\/\/[^:\n].*|\/\*[\s\S]*?\*\//g, " ");
+  const source = withoutComments(sources.join("\n"));
   const terraformStart = source.search(/\bterraform\s*\{/);
-  const terraform = terraformStart < 0 ? undefined : source.slice(terraformStart);
-  const block = terraform?.match(/\bbackend\s+"([\w-]+)"\s*\{([^{}]*)\}/);
+  if (terraformStart < 0) return undefined;
+  const terraform = blockBody(source, terraformStart);
+  const backendStart = terraform?.search(/\bbackend\s+"[\w-]+"\s*\{/);
+  if (!terraform || backendStart === undefined || backendStart < 0) return undefined;
+  const block = terraform.slice(backendStart).match(/^\s*backend\s+"([\w-]+)"\s*\{/);
   if (!block) return undefined;
-  const body = block[2]!;
+  const body = blockBody(terraform.slice(backendStart), 0);
+  if (!body) return undefined;
   const value = (name: string) => body.match(new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`))?.[1];
   const flags: Backend["flags"] = {};
   for (const name of [

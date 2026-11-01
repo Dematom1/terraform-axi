@@ -28,6 +28,16 @@ describe("static backend inspection", () => {
     expect(JSON.stringify(result)).not.toContain("never-return-this");
   });
 
+  it("ignores backend-like text outside terraform and preserves comment markers in strings", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(
+      join(directory, "main.tf"),
+      `terraform {}\nresource "terraform_data" "x" { input = "backend \\\"s3\\\" { region = \\\"x\\\" } // #" }`,
+    );
+    expect(inspectBackend(directory)).toBeUndefined();
+  });
+
   it("returns no backend when a module has no static backend block", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
