@@ -18,8 +18,10 @@ function configuredModules(): Set<string> {
   return new Set();
 }
 function safeModule(module: string, configured: Set<string>): boolean {
+  const parts = module.split("/");
+  if (parts.some((part) => /^(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9_-]+|AKIA[A-Z0-9]{16})$/i.test(part) || /(?:^|[_-])(?:token|secret|password|api[_-]?key)(?:$|[_-])/i.test(part))) return false;
   if (configured.has(module)) return true;
-  return module.includes("/") && !module.startsWith("/") && module.split("/").every((part) => part !== ".." && /^[A-Za-z0-9_.-]+$/.test(part));
+  return module.includes("/") && !module.startsWith("/") && parts.every((part) => part !== ".." && /^[A-Za-z0-9_.-]+$/.test(part));
 }
 
 function record(input: unknown): Session | undefined {
