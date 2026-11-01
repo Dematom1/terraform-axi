@@ -28,7 +28,7 @@ process.stdin.on("end", () => {
   try {
     const value: unknown = JSON.parse(input);
     if (value && typeof value === "object" && "session_id" in value && typeof value.session_id === "string" && /^[a-zA-Z0-9_-]+$/.test(value.session_id) && process.env.CLAUDE_ENV_FILE)
-      appendFileSync(process.env.CLAUDE_ENV_FILE, `export CLAUDE_SESSION_ID='${value.session_id}'\n`, { mode: 0o600 });
+      appendFileSync(process.env.CLAUDE_ENV_FILE, `export TERRAFORM_AXI_SESSION_ID='${value.session_id}'\n`, { mode: 0o600 });
   } catch {}
   process.stdout.write(`${encode({ terraform_axi: { binary: config.binary, modules: config.modules, last_session: lastSession(), writes: "never" } })}\n`);
 });

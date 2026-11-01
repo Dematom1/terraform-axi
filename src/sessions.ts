@@ -1,9 +1,10 @@
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-export type Session = { session_id: string; cwd: string; commands: Record<string, number>; modules: Record<string, number>; ended_at: string };
-type Store = { active: Record<string, Omit<Session, "ended_at">>; sessions: Session[] };
+export type Session = { cwd: string; commands: Record<string, number>; modules: Record<string, number>; ended_at: string };
+type ActiveSession = Omit<Session, "ended_at">;
+type Store = { active: Record<string, ActiveSession>; sessions: Record<string, Session> };
 const configDir = () => join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "terraform-axi");
 const dataPath = () => join(configDir(), "sessions.json");
 
@@ -23,8 +24,19 @@ function readStore(path: string): Store {
     const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("malformed session store");
     const value = parsed as Record<string, unknown>;
-    if (!Array.isArray(value.sessions) || (value.active !== undefined && (!value.active || typeof value.active !== "object" || Array.isArray(value.active)))) throw new Error("malformed session store");
-    return { active: (value.active ?? {}) as Store["active"], sessions: value.sessions as Session[] };
+    if (value.active !== undefined && (!value.active || typeof value.active !== "object" || Array.isArray(value.active))) throw new Error("malformed session store");
+    if (Array.isArray(value.sessions)) {
+      const sessions: Store["sessions"] = {};
+      value.sessions.forEach((entry, index) => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
+        const session = { ...(entry as Record<string, unknown>) };
+        delete session.session_id;
+        sessions[`legacy-${index}`] = session as Session;
+      });
+      return { active: (value.active ?? {}) as Store["active"], sessions };
+    }
+    if (!value.sessions || typeof value.sessions !== "object") throw new Error("malformed session store");
+    return { active: (value.active ?? {}) as Store["active"], sessions: value.sessions as Store["sessions"] };
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { active: {}, sessions: [] };
     throw error;
@@ -41,7 +53,12 @@ function updateStore(update: (store: Store) => void, path = dataPath()): void {
       if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") throw error;
       try {
         const before = statSync(lock);
-        if (Date.now() - before.mtimeMs > 30_000) {
+        const owner = Number(readFileSync(lock, "utf8"));
+        let alive = true;
+        if (Number.isSafeInteger(owner) && owner > 0) {
+          try { process.kill(owner, 0); } catch (error) { alive = !!error && typeof error === "object" && "code" in error && error.code !== "ESRCH"; }
+        }
+        if (!alive) {
           const stale = `${lock}.${process.pid}.${Math.random().toString(36).slice(2)}`;
           renameSync(lock, stale);
           try {
@@ -50,7 +67,7 @@ function updateStore(update: (store: Store) => void, path = dataPath()): void {
               unlinkSync(stale);
               continue;
             }
-            try { writeFileSync(lock, readFileSync(stale), { flag: "wx", mode: 0o600 }); } catch { /* A writer already holds the lock. */ }
+            try { linkSync(stale, lock); } catch { /* Another writer acquired the lock. */ }
           } finally { try { unlinkSync(stale); } catch { /* Already removed. */ } }
         }
       } catch { /* Lock disappeared. */ }
@@ -58,7 +75,7 @@ function updateStore(update: (store: Store) => void, path = dataPath()): void {
     }
   }
   try {
-    writeFileSync(fd, `${Date.now()}\n`);
+    writeFileSync(fd, `${process.pid}\n`);
     closeSync(fd);
     const store = readStore(path);
     update(store);
@@ -70,11 +87,11 @@ function updateStore(update: (store: Store) => void, path = dataPath()): void {
   } finally { unlinkSync(lock); }
 }
 
-export function recordInvocation(command: string | undefined, module: string | undefined, cwd = process.cwd(), sessionId = process.env.CLAUDE_SESSION_ID): void {
+export function recordInvocation(command: string | undefined, module: string | undefined, cwd = process.cwd(), sessionId = process.env.TERRAFORM_AXI_SESSION_ID): void {
   if (!sessionId || !/^[a-zA-Z0-9_-]+$/.test(sessionId) || !command || !["plan", "drift", "state", "doctor"].includes(command)) return;
   const modules = configuredModules();
   updateStore((store) => {
-    const session = store.active[sessionId] ?? { session_id: sessionId, cwd, commands: {}, modules: {} };
+    const session = store.active[sessionId] ?? { cwd, commands: {}, modules: {} };
     session.commands[command] = (session.commands[command] ?? 0) + 1;
     if (module && modules.has(module)) session.modules[module] = (session.modules[module] ?? 0) + 1;
     store.active[sessionId] = session;
@@ -89,13 +106,15 @@ export function recordSession(input: unknown, path = dataPath()): void {
     const active = store.active[sessionId];
     if (!active) return;
     delete store.active[sessionId];
-    store.sessions = [...store.sessions, { ...active, ended_at: new Date().toISOString() }].slice(-50);
+    store.sessions[sessionId] = { ...active, ended_at: new Date().toISOString() };
+    const newest = Object.entries(store.sessions).sort((a, b) => b[1].ended_at.localeCompare(a[1].ended_at)).slice(0, 50);
+    store.sessions = Object.fromEntries(newest);
   }, path);
 }
 
 export function lastSession(path = dataPath(), cwd = process.cwd()): Session | undefined {
   try {
     const store = readStore(path);
-    return store.sessions.slice().reverse().find((session) => session.cwd === cwd);
+    return Object.values(store.sessions).filter((session) => session.cwd === cwd).sort((a, b) => b.ended_at.localeCompare(a.ended_at))[0];
   } catch { return undefined; }
 }

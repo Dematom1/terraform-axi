@@ -7,7 +7,7 @@ import {
 } from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
 import { homedir } from "node:os";
-import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION } from "./version.js";
@@ -63,10 +63,33 @@ function withClaudeSettingsLock<T>(action: () => T): T {
     try { fd = openSync(lock, "wx", 0o600); break; }
     catch (error) {
       if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") throw error;
+      try {
+        const before = statSync(lock);
+        const owner = Number(readFileSync(lock, "utf8"));
+        let alive = true;
+        if (Number.isSafeInteger(owner) && owner > 0) {
+          try { process.kill(owner, 0); } catch (failure) { alive = !!failure && typeof failure === "object" && "code" in failure && failure.code !== "ESRCH"; }
+        }
+        if (!alive) {
+          const stale = `${lock}.${process.pid}.${Math.random().toString(36).slice(2)}`;
+          renameSync(lock, stale);
+          try {
+            const moved = statSync(stale);
+            if (moved.dev === before.dev && moved.ino === before.ino) {
+              unlinkSync(stale);
+              continue;
+            }
+            try { linkSync(stale, lock); } catch { /* Another process acquired the lock. */ }
+          } finally { try { unlinkSync(stale); } catch { /* Already removed. */ } }
+        }
+      } catch { /* Lock disappeared. */ }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
     }
   }
-  try { return action(); } finally { closeSync(fd); unlinkSync(lock); }
+  try {
+    writeFileSync(fd, `${process.pid}\n`);
+    return action();
+  } finally { closeSync(fd); unlinkSync(lock); }
 }
 function sessionEndStatus(settings: Record<string, unknown>): "installed" | "missing" | "stale" {
   const hooks = settings.hooks;
