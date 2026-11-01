@@ -46,9 +46,9 @@ function writeClaudeSettings(settings: Record<string, unknown>): void {
   } catch (error) {
     if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") throw error;
   }
-  const temp = `${claudeSettingsPath}.${process.pid}.tmp`;
+  const temp = `${claudeSettingsPath}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
   try {
-    writeFileSync(temp, `${JSON.stringify(settings, null, 2)}\n`, { mode });
+    writeFileSync(temp, `${JSON.stringify(settings, null, 2)}\n`, { flag: "wx", mode });
     chmodSync(temp, mode);
     renameSync(temp, claudeSettingsPath);
   } finally {

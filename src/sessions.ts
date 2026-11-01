@@ -91,8 +91,8 @@ export function recordSession(input: unknown, path = dataPath()): void {
       if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") throw error;
     }
     store.sessions = [...store.sessions, session].slice(-50);
-    const temp = `${path}.${process.pid}.tmp`;
-    writeFileSync(temp, `${JSON.stringify(store)}\n`, { mode: 0o600 });
+    const temp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+    writeFileSync(temp, `${JSON.stringify(store)}\n`, { flag: "wx", mode: 0o600 });
     renameSync(temp, path);
   } finally { unlinkSync(lock); }
 }
