@@ -8,15 +8,18 @@ import { main } from "../src/cli.js";
 const root = join(import.meta.dirname, "..");
 
 describe("terraform-axi scaffold", () => {
-  it("skips release checks only for all-bot commit lists", () => {
-    const script = join(root, "scripts", "release-bot-only.mjs");
-    const check = (authors: string[]) =>
-      execFileSync(process.execPath, [script], { encoding: "utf8", input: `${authors.join("\n")}\n` });
+  it.each(["no-mistakes-required", "guard-generated-files"])(
+    "%s skips only all-bot release commits",
+    () => {
+      const script = join(root, "scripts", "release-bot-only.mjs");
+      const check = (authors: string[]) =>
+        execFileSync(process.execPath, [script], { encoding: "utf8", input: `${authors.join("\n")}\n` });
 
-    expect(check(["release-please[bot]", "release-please[bot]"])).toBe("true");
-    expect(check(["release-please[bot]", "human-user"])).toBe("false");
-    expect(check([])).toBe("false");
-  });
+      expect(check(["release-please[bot]", "release-please[bot]"])).toBe("true");
+      expect(check(["release-please[bot]", "human-user"])).toBe("false");
+      expect(check([])).toBe("false");
+    },
+  );
 
   it("reports that plan is not implemented in the scaffold", async () => {
     const chunks: string[] = [];
