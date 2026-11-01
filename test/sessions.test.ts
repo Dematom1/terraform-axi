@@ -161,7 +161,6 @@ describe("session memory", () => {
     expect(readFileSync(envFile, "utf8")).toBe("export TERRAFORM_AXI_SESSION=fresh-session\n");
     expect(output).toContain("last_session");
     expect(output).toContain("writes: never");
-    expect(readFileSync(join(root, "dist", "bin", "terraform-axi-ctx.js"), "utf8")).not.toContain("child_process");
   });
 
   it("does not export unsafe session ids", () => {

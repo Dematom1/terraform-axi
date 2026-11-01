@@ -69,14 +69,18 @@ function readTail(path: string): Entry[] {
 
 /** Summarizes the most recent session other than `current`, from the tails of the log and its rotated generation. */
 export function lastSession(current = sessionKey(), path = sessionsPath()): LastSession | undefined {
-  let generations = [path];
+  let rotated: string[] = [];
   try {
-    generations = [path, ...readdirSync(dirname(path)).filter((file) => file.startsWith(`${basename(path)}.`)).map((file) => join(dirname(path), file))];
+    rotated = readdirSync(dirname(path))
+      .filter((file) => file.startsWith(`${basename(path)}.`))
+      .map((file) => join(dirname(path), file))
+      .sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs);
   } catch {
     /* missing log directory */
   }
+  const generations = [...rotated, path];
   const entries = generations.flatMap(readTail);
-  const target = [...entries].sort((a, b) => b.t - a.t).find((entry) => entry.s !== null && entry.s !== current)?.s;
+  const target = [...entries].reverse().find((entry) => entry.s !== null && entry.s !== current)?.s;
   if (!target) return undefined;
   const session: LastSession = { commands: {}, modules: {}, ended_at: "" };
   let ended = 0;
