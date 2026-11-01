@@ -105,6 +105,7 @@ export function redactState(state: StateModel): RedactedState {
   const resources = state.details.map((detail) => {
     const resourceType = detail.type.toLowerCase();
     const wholeResource =
+      resourceType === "terraform_data" ||
       SECRET_TYPES.some((type) => resourceType.startsWith(type)) ||
       (resourceType.startsWith("github_actions_") && resourceType.includes("secret"));
     const attributes: Record<string, unknown> = {};

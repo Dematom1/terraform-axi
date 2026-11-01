@@ -17,6 +17,7 @@ import { CliError, ReportError } from "./errors.js";
 import { lastSession, recordInvocation } from "./sessions.js";
 import { PLAN_ARGS, planCommand, usage as planUsage } from "./plan/command.js";
 import { DRIFT_ARGS, drift, driftUsage } from "./commands/drift.js";
+import { stateCommand } from "./commands/state.js";
 
 const name = "terraform-axi";
 const configPath = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), name, "config.json");
@@ -61,7 +62,10 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     return output(await drift(args, config()));
   },
   doctor: async (args) => notImplemented("doctor", args),
-  state: async (args) => notImplemented("state", args),
+  state: async (args) =>
+    args.length === 1 && args[0] === "--help"
+      ? output({ usage: "terraform-axi state list <module> | state resource <module> <address> [--full]", help: hints })
+      : stateCommand(config(), args),
   setup: async (args) => {
     if (args.length === 1 && args[0] === "--help")
       return output({
@@ -122,7 +126,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
 };
-const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: resources changed outside Terraform/OpenTofu (refresh-only plan)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted (coming soon)\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
+const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: resources changed outside Terraform/OpenTofu (refresh-only plan)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};

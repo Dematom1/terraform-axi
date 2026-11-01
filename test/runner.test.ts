@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { run, validateWrapper } from "../src/runner.js";
+import { run, runOperation, validateWrapper } from "../src/runner.js";
 import { CliError } from "../src/errors.js";
 
 let dir: string;
@@ -53,6 +53,16 @@ describe("runner seam", () => {
     expect(invocation.argv).toEqual(["module-a", "version", "-json"]);
     expect(invocation.env.AWS_SECRET_ACCESS_KEY).toBe("fixture-secret");
     expect(invocation.env.TF_IN_AUTOMATION).toBe("1");
+  });
+  it("runs only the fixed read-only state operations", async () => {
+    const wrapper = executable("printf '%s\\n' \"$@\"");
+    expect(
+      (await runOperation(config(`${wrapper} {module}`), "mod", "state_list")).stdout.split("\n").filter(Boolean),
+    ).toEqual(["mod", "state", "list"]);
+    expect(
+      (await runOperation(config(`${wrapper} {module}`), "mod", "show_state")).stdout.split("\n").filter(Boolean),
+    ).toEqual(["mod", "show", "-json"]);
+    expect((await runOperation(config(`${wrapper} {module}`), "mod", "state_list")).stdout).not.toContain("pull");
   });
   it("does not treat wrapper words or module names as Terraform operations", async () => {
     const wrapper = executable('printf \'{"terraform_version":"1.2.3"}\\n\'');

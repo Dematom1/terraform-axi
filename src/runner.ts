@@ -47,7 +47,7 @@ export function assertAllowed(args: string[]): void {
     args.some((arg) => denied.has(arg) || arg === "-out" || arg.startsWith("-out=")) ||
     (args[0] === "state" && args.some((arg) => deniedState.has(arg))) ||
     (args[0] === "workspace" && args.some((arg) => deniedWorkspace.has(arg))) ||
-    (args[0] === "show" && args.length > 1)
+    (args[0] === "show" && !(args.length === 2 && args[1] === "-json"))
   )
     throw new CliError("unsupported Terraform argument");
 }
@@ -102,6 +102,12 @@ export type RunOptions = {
   maxBuffer?: number;
 };
 export type RunResult = { stdout: string; stderr: string; exitCode: number; fallbackReason?: string };
+
+const operations = { state_list: ["state", "list"], show_state: ["show", "-json"] } as const;
+export type Operation = keyof typeof operations;
+export function runOperation(config: Config, module: string, operation: Operation, timeout = 600_000) {
+  return run(config, module, timeout, { args: [...operations[operation]], maxBuffer: 64 * 1024 * 1024 });
+}
 
 export async function run(
   config: Config,
@@ -171,14 +177,19 @@ export async function run(
     const record = failure && typeof failure === "object" ? failure : {};
     const category = classify(failure);
     const stdout = "stdout" in record && typeof record.stdout === "string" ? record.stdout : "";
-    const diagnostics = stdout.split("\n").flatMap((line) => {
-      try {
-        const event: unknown = JSON.parse(line);
-        return event && typeof event === "object" && "type" in event && event.type === "diagnostic" ? [event] : [];
-      } catch {
-        return [];
-      }
-    });
+    const diagnostics =
+      options.args?.[0] === "state" || options.args?.[0] === "show"
+        ? []
+        : stdout.split("\n").flatMap((line) => {
+            try {
+              const event: unknown = JSON.parse(line);
+              return event && typeof event === "object" && "type" in event && event.type === "diagnostic"
+                ? [event]
+                : [];
+            } catch {
+              return [];
+            }
+          });
     throw new CliError(category, 1, diagnostics);
   }
 }

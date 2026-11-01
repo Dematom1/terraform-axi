@@ -1,6 +1,6 @@
 ---
 name: terraform-axi
-description: Read-only Terraform and OpenTofu CLI; plan risk summaries, --expect count assertions, and drift detection. Doctor and state commands are planned.
+description: Read-only Terraform and OpenTofu CLI; plan risk summaries, --expect count assertions, drift detection, and state inspection.
 ---
 
 # terraform-axi
@@ -20,7 +20,8 @@ See the [README command reference](https://github.com/Dematom1/terraform-axi#com
 | `terraform-axi plan --plan-json <file>`                                                     | Same summary from a saved `show -json <planfile>` document or `plan -json` stream                                      |
 | `terraform-axi drift <module> [--binary terraform\|tofu]`                                   | Drift from a refresh-only plan: drifted resources and a human-only accept command                                      |
 | `terraform-axi doctor <module>`                                                             | Backend and credential diagnostics (planned; not implemented)                                                          |
-| `terraform-axi state list <module>` / `state resource <address>`                            | State inspection with secrets redacted (planned; not implemented)                                                      |
+| `terraform-axi state list <module>`                                                         | List resource addresses in a module's state                                                                             |
+| `terraform-axi state resource <module> <address>`                                           | Inspect one state resource with secrets redacted                                                                       |
 | `terraform-axi setup [--binary ...] [--wrapper ...] [--module name] [--remove-module name]` | Configure binary, wrapper, and registered modules                                                                      |
 | `terraform-axi setup status`                                                                | Inspect current settings and managed hooks                                                                             |
 | `terraform-axi setup hooks` / `setup uninstall`                                             | Install or remove terraform-axi-managed user-level SessionStart hooks                                                  |

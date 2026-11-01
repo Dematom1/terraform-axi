@@ -24,10 +24,10 @@ export function parseState(json: string): StateModel {
   try {
     parsed = JSON.parse(json);
   } catch {
-    throw new Error("Malformed Terraform state JSON");
+    throw new SyntaxError("Malformed Terraform state JSON");
   }
   const root = record(parsed);
-  if (!root) throw new Error("Malformed Terraform state JSON");
+  if (!root) throw new SyntaxError("Malformed Terraform state JSON");
   const resources: StateResource[] = [];
   const details: StateDetail[] = [];
   const walk = (module: unknown, moduleAddress: string) => {
@@ -40,7 +40,7 @@ export function parseState(json: string): StateModel {
         const address = value.address;
         const type = value.type;
         const mode = typeof value.mode === "string" ? value.mode : "managed";
-        const instances = Array.isArray(value.instances) ? value.instances : [];
+        const instances = Array.isArray(value.instances) ? value.instances : record(value.values) ? [value] : [];
         for (const rawInstance of instances) {
           const instance = record(rawInstance);
           if (!instance) continue;
@@ -51,7 +51,7 @@ export function parseState(json: string): StateModel {
             address: instanceAddress,
             type,
             provider: typeof value.provider_name === "string" ? value.provider_name : "",
-            attributes: record(instance.attributes) ?? {},
+            attributes: record(instance.values) ?? record(instance.attributes) ?? {},
             sensitiveValues: instance.sensitive_values ?? {},
             sensitiveAttributes: instance.sensitive_attributes ?? [],
           });
