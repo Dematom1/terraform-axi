@@ -28,6 +28,13 @@ describe("static backend inspection", () => {
     expect(JSON.stringify(result)).not.toContain("never-return-this");
   });
 
+  it("keeps metadata offsets correct after non-BMP text", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(join(directory, "main.tf"), '# 😀\nterraform { backend "s3" { endpoint = "https://s3.example.com" region = "us-east-1" } }');
+    expect(inspectBackend(directory)).toMatchObject({ endpointHost: "s3.example.com", region: "us-east-1" });
+  });
+
   it("ignores backend-like text outside terraform and preserves comment markers in strings", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import type { Backend } from "./rules.js";
 
 function maskSyntax(source: string): string {
-  const chars = [...source];
+  const chars = source.split("");
   let quoted = false;
   let escaped = false;
   for (let i = 0; i < chars.length; i++) {
