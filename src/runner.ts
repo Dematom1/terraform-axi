@@ -7,23 +7,14 @@ import type { Config } from "./config.js";
 
 const execute = promisify(execFile);
 const versionArgs = ["version", "-json"];
-  const execOptions = {
-    timeout: timeout ?? 10_000,
-    killSignal: "SIGKILL" as const,
-    maxBuffer: options.maxBuffer ?? 4 * 1024 * 1024,
-    env: runEnv(),
-  };
-  // An accepted exit code is a result: return its output instead of failing.
-  const accepted = (error: unknown): RunResult | undefined => {
-    const record = error && typeof error === "object" ? error : {};
-    if (!("code" in record) || typeof record.code !== "number" || !options.exitCodes?.includes(record.code))
-      return undefined;
-    const text = (key: string) =>
-      key in record && typeof (record as Record<string, unknown>)[key] === "string"
-        ? ((record as Record<string, unknown>)[key] as string)
-        : "";
-    return { stdout: text("stdout"), stderr: text("stderr"), exitCode: record.code };
-  };
+// TF_CLI_ARGS* could append arbitrary flags, such as -out=, writing a plan with secrets.
+const runEnv = () => ({
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("TF_CLI_ARGS"))),
+  TF_IN_AUTOMATION: "1",
+  TF_INPUT: "0",
+  CHECKPOINT_DISABLE: "1",
+});
+function classify(error: unknown): "not found" | "not executable" | "timeout" | "output limit exceeded" | "failed" {
   const record = error && typeof error === "object" ? error : {};
   if ("code" in record && record.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return "output limit exceeded";
   if ("code" in record && record.code === "ENOENT") return "not found";
@@ -146,20 +137,37 @@ export async function run(
       argv = [`-chdir=${directory}`, ...args];
     } else argv = args;
   }
+  const execOptions = {
+    timeout: timeout ?? 10_000,
+    killSignal: "SIGKILL" as const,
+    maxBuffer: options.maxBuffer ?? 4 * 1024 * 1024,
+    env: runEnv(),
+  };
+  const accepted = (error: unknown): RunResult | undefined => {
+    const record = error && typeof error === "object" ? error : {};
+    if (!("code" in record) || typeof record.code !== "number" || !options.exitCodes?.includes(record.code))
+      return undefined;
+    const text = (key: string) =>
+      key in record && typeof (record as Record<string, unknown>)[key] === "string"
+        ? ((record as Record<string, unknown>)[key] as string)
+        : "";
+    return { stdout: text("stdout"), stderr: text("stderr"), exitCode: record.code };
+  };
+  try {
     assertAllowed(args);
     const result = await execute(file, argv, execOptions);
     return { ...result, exitCode: 0, ...(fallbackReason ? { fallbackReason } : {}) };
-  try {
-    // Only the version probe retries with OpenTofu: a failed plan rerun under another binary would hide
-    // Terraform's own failure behind a different tool's result.
-    if (!options.args && !config.wrapper && config.binary === "auto" && file === "terraform" && classify(error) !== "output limit exceeded") {
   } catch (error) {
     const result = accepted(error);
     if (result) return { ...result, ...(fallbackReason ? { fallbackReason } : {}) };
     let failure = error;
-        assertAllowed(args);
-        const result = await execute("tofu", argv, execOptions);
-        return { ...result, exitCode: 0, fallbackReason: `Terraform invocation failed: ${classify(error)}` };
+    if (
+      !options.args &&
+      !config.wrapper &&
+      config.binary === "auto" &&
+      file === "terraform" &&
+      classify(error) !== "output limit exceeded"
+    ) {
       try {
         assertAllowed(args);
         const result = await execute("tofu", argv, execOptions);
