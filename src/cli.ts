@@ -34,10 +34,6 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
   drift: async (args) => notImplemented("drift", args),
   doctor: async (args) => notImplemented("doctor", args),
   state: async (args) => notImplemented("state", args),
-  update: async (args) => {
-    if (args.length === 1 && args[0] === "--help") return output({ usage: "terraform-axi update", help: hints });
-    return notImplemented("update", args);
-  },
   setup: async (args) => {
     if (args.length === 1 && args[0] === "--help")
       return output({
@@ -96,7 +92,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
 };
-const help = `usage: terraform-axi <command> [args]\ncommands[7]:\n  (none)=home, plan, drift, doctor, state, setup, update\nsummary[7]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary (coming soon)\n  drift: detect drift (coming soon)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted (coming soon)\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\n  update: check for updates (not implemented)\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
+const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary (coming soon)\n  drift: detect drift (coming soon)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted (coming soon)\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};
@@ -155,6 +151,10 @@ export async function main(
   argv = process.argv.slice(2),
   stdout: { write: (chunk: string) => unknown } = process.stdout,
 ): Promise<void> {
+  if (argv.length === 2 && argv[0] === "update" && argv[1] === "--help") {
+    stdout.write(output({ usage: "terraform-axi update", help: hints }));
+    return;
+  }
   await runAxiCli<undefined>({
     description: "Read-only Terraform and OpenTofu for agents",
     version: VERSION,
@@ -162,7 +162,7 @@ export async function main(
     stdout,
     topLevelHelp: output({
       usage: "terraform-axi <command> [args]",
-      commands: ["home", "plan", "drift", "doctor", "state", "setup", "update"],
+      commands: ["home", "plan", "drift", "doctor", "state", "setup"],
       help,
     }),
     commands,

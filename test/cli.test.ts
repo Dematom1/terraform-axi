@@ -161,7 +161,7 @@ describe("terraform-axi scaffold", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");
     mkdirSync(configDir, { recursive: true });
-    const wrapper = join(home, "wrapper executable");
+    const wrapper = join(home, "wrapper-executable");
     writeFileSync(
       wrapper,
       `#!/bin/sh\nprintf '{"${field}":"9.9.9"}\\n'\n`,
@@ -169,7 +169,7 @@ describe("terraform-axi scaffold", () => {
     );
     writeFileSync(
       join(configDir, "config.json"),
-      JSON.stringify({ binary: "auto", modules: ["module-a"], wrapper: `"${wrapper}" {module}` }),
+      JSON.stringify({ binary: "auto", modules: ["module-a"], wrapper: `${wrapper} {module}` }),
     );
     try {
       const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {

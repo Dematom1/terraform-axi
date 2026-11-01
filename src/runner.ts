@@ -46,14 +46,9 @@ export function validateWrapper(wrapper: string): void {
 }
 
 export function wrapperArgs(wrapper: string, module: string, args: string[]): [string, string[]] {
-  if (/[|;&$`<>(){}*?!\[\]\r\n]/.test(wrapper.replaceAll("{module}", "")))
+  if (/[|;&$`<>(){}*?!\[\]\\'"\r\n]/.test(wrapper.replaceAll("{module}", "")))
     throw new CliError("wrapper contains shell metacharacters; use a script");
-  const words =
-    wrapper
-      .match(/(?:'[^']*'|"[^"]*"|\\.|[^\s])+/g)
-      ?.map((part) =>
-        part.replace(/^(?:'([^']*)'|"([^"]*)")$/, (_, single: string, double: string) => single ?? double),
-      ) ?? [];
+  const words = wrapper.trim().split(/\s+/).filter(Boolean);
   const indexes = words.flatMap((word, i) => (word === "{module}" ? [i] : []));
   if (
     indexes.length !== 1 ||
@@ -66,24 +61,22 @@ export function wrapperArgs(wrapper: string, module: string, args: string[]): [s
 }
 async function resolveBinary(binary: Config["binary"]): Promise<"terraform" | "tofu"> {
   if (binary !== "auto") return binary;
-  try {
-    await execute("terraform", ["version", "-json"], { timeout: 2_000, env: process.env });
-    return "terraform";
-  } catch (error) {
-    if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) {
-      throw new CliError(
-        error && typeof error === "object" && "code" in error && error.code === "EACCES" ? "not executable" : "failed",
-      );
+  let terraformError: unknown;
+  for (const candidate of ["terraform", "tofu"] as const) {
+    try {
+      await execute(candidate, ["version", "-json"], { timeout: 2_000, env: process.env });
+      return candidate;
+    } catch (error) {
+      if (candidate === "terraform") terraformError = error;
+      else {
+        const fallbackMissing = error && typeof error === "object" && "code" in error && error.code === "ENOENT";
+        const failure = fallbackMissing && terraformError ? terraformError : error;
+        const code = failure && typeof failure === "object" && "code" in failure ? failure.code : "failed";
+        throw new CliError(code === "ENOENT" ? "not found" : code === "EACCES" ? "not executable" : code === "ETIMEDOUT" ? "timeout" : "failed");
+      }
     }
   }
-  try {
-    await execute("tofu", ["version", "-json"], { timeout: 2_000, env: process.env });
-    return "tofu";
-  } catch (error) {
-    throw new CliError(
-      error && typeof error === "object" && "code" in error && error.code === "EACCES" ? "not executable" : "not found",
-    );
-  }
+  throw new CliError("not found");
 }
 
 export async function run(
@@ -91,7 +84,7 @@ export async function run(
   module: string,
   operation: Operation,
   timeout?: number,
-): Promise<{ stdout: string; stderr: string }> {
+): Promise<{ stdout: string; stderr: string; exitCode: 0 | 2 }> {
   const args = [...operations[operation]];
   assertAllowed(args);
   let file: string;
@@ -111,12 +104,13 @@ export async function run(
     } else argv = args;
   }
   try {
-    return await execute(file, argv, {
+    const result = await execute(file, argv, {
       timeout: timeout ?? (operation === "version" ? 10_000 : 600_000),
       killSignal: "SIGKILL",
       maxBuffer: 4 * 1024 * 1024,
       env: { ...process.env, TF_IN_AUTOMATION: "1", TF_INPUT: "0", CHECKPOINT_DISABLE: "1" },
     });
+    return { ...result, exitCode: 0 };
   } catch (error) {
     const record = error && typeof error === "object" ? error : {};
     const code = "code" in record ? String(record.code) : "failed";
@@ -124,7 +118,8 @@ export async function run(
       ("killed" in record && record.killed === true) || ("signal" in record && record.signal === "SIGKILL");
     const stdout = "stdout" in record && typeof record.stdout === "string" ? record.stdout : "";
     const stderr = "stderr" in record && typeof record.stderr === "string" ? record.stderr : "";
-    if (code === "2" && (operation === "plan" || operation === "plan_refresh_only")) return { stdout, stderr };
+    if (code === "2" && (operation === "plan" || operation === "plan_refresh_only"))
+      return { stdout, stderr, exitCode: 2 };
     const diagnostics = stdout.split("\n").flatMap((line) => {
       try {
         const event: unknown = JSON.parse(line);

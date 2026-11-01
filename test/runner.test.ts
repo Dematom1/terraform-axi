@@ -29,6 +29,8 @@ describe("runner seam", () => {
     }
     expect(() => validateWrapper("just tf {module} {module}")).toThrow();
     expect(() => validateWrapper("just tf prefix{module}")).toThrow();
+    expect(() => validateWrapper("just tf '{module}'")).toThrow();
+    expect(() => validateWrapper("just tf \\\\{module}")).toThrow();
   });
   it("keeps a wrapper module argument intact and passes the environment through", async () => {
     const log = join(dir, "argv.json");
@@ -64,10 +66,21 @@ describe("runner seam", () => {
       stdout: "terraform-selected\n",
     });
   });
+  it("falls back to tofu when Terraform's version probe fails", async () => {
+    writeFileSync(join(dir, "terraform"), "#!/bin/sh\nexit 1\n", { mode: 0o700 });
+    writeFileSync(join(dir, "tofu"), "#!/bin/sh\nprintf 'tofu-selected\\n'\n", { mode: 0o700 });
+    chmodSync(join(dir, "terraform"), 0o700);
+    chmodSync(join(dir, "tofu"), 0o700);
+    vi.stubEnv("PATH", dir);
+    await expect(run({ binary: "auto", modules: [] }, "", "workspace_show")).resolves.toMatchObject({
+      stdout: "tofu-selected\n",
+    });
+  });
   it("accepts plan exit 2 and retains parsed diagnostics on failures", async () => {
     const changed = executable('printf \'{"type":"change_summary"}\\n\'; exit 2');
     await expect(run(config(`${changed} {module}`), "mod", "plan")).resolves.toMatchObject({
       stdout: expect.stringContaining("change_summary"),
+      exitCode: 2,
     });
     const failed = executable('printf \'{"type":"diagnostic","diagnostic":{"summary":"bad"}}\\n\'; exit 1');
     await expect(run(config(`${failed} {module}`), "mod", "plan")).rejects.toMatchObject({
