@@ -4,7 +4,23 @@ import { dirname, join } from "node:path";
 
 export type Session = { cwd: string; commands: Record<string, number>; modules: Record<string, number>; ended_at: string };
 type Store = { sessions: Session[] };
-const dataPath = () => join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "terraform-axi", "sessions.json");
+const configDir = () => join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "terraform-axi");
+const dataPath = () => join(configDir(), "sessions.json");
+
+function configuredModules(): Set<string> {
+  try {
+    const config: unknown = JSON.parse(readFileSync(join(configDir(), "config.json"), "utf8"));
+    if (config && typeof config === "object" && !Array.isArray(config)) {
+      const modules = (config as Record<string, unknown>).modules;
+      if (Array.isArray(modules)) return new Set(modules.filter((module): module is string => typeof module === "string"));
+    }
+  } catch { /* No configured modules. */ }
+  return new Set();
+}
+function safeModule(module: string, configured: Set<string>): boolean {
+  if (configured.has(module)) return true;
+  return module.includes("/") && !module.startsWith("/") && module.split("/").every((part) => part !== ".." && /^[A-Za-z0-9_.-]+$/.test(part));
+}
 
 function record(input: unknown): Session | undefined {
   if (!input || typeof input !== "object") return;
@@ -12,6 +28,7 @@ function record(input: unknown): Session | undefined {
   if (typeof value.cwd !== "string" || typeof value.transcript_path !== "string") return;
   const commands: Record<string, number> = {};
   const modules: Record<string, number> = {};
+  const configured = configuredModules();
   try {
     for (const line of readFileSync(value.transcript_path, "utf8").split("\n")) {
       let row: unknown;
@@ -29,8 +46,7 @@ function record(input: unknown): Session | undefined {
         if (typeof command !== "string") continue;
         for (const match of command.matchAll(/(?:^|[;&|]\s*)terraform-axi\s+(plan|drift|state|doctor)\s+([^\s;&|]+)/g)) {
           commands[match[1]!] = (commands[match[1]!] ?? 0) + 1;
-          if (!/(?:sk|pk|rk)_(?:live|test)_[\w-]+|AKIA[A-Z0-9]{16}|(?:token|secret|password|api[_-]?key)[=:_-]/i.test(match[2]!))
-            modules[match[2]!] = (modules[match[2]!] ?? 0) + 1;
+          if (safeModule(match[2]!, configured)) modules[match[2]!] = (modules[match[2]!] ?? 0) + 1;
         }
       }
     }
