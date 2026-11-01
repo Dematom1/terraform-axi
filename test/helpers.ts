@@ -13,7 +13,7 @@ export function realModule(files: Record<string, string>, binary = "terraform"):
   if (!Object.keys(files).some((name) => name.endsWith(".tf"))) {
     writeFileSync(
       join(directory, "main.tf"),
-      'terraform { backend "local" {} }\nresource "terraform_data" "test" {}\n',
+      'terraform {\n  backend "local" {}\n}\nresource "terraform_data" "test" {}\n',
       { mode: 0o600 },
     );
   }
