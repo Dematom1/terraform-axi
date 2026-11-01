@@ -104,6 +104,7 @@ export function redactState(state: StateModel): RedactedState {
   let redacted = 0;
   const resources = state.details.map((detail) => {
     const resourceType = detail.type.toLowerCase();
+    // terraform_data input/output can hold secrets Terraform does not mark sensitive.
     const wholeResource =
       resourceType === "terraform_data" ||
       SECRET_TYPES.some((type) => resourceType.startsWith(type)) ||
