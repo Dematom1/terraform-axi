@@ -1,18 +1,30 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { realpathSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { Backend } from "./rules.js";
 
 export function inspectBackend(module: string): Backend | undefined {
-  const directory = resolve(module);
-  const unsafe = resolve(homedir(), "Code", "infrastructure");
-  if (directory === unsafe || directory.startsWith(`${unsafe}/`))
-    throw new Error("refusing to inspect the protected infrastructure directory");
+  const directory = realpathSync(resolve(module));
+  const unsafePath = resolve(homedir(), "Code", "infrastructure");
+  let unsafe: string;
+  try {
+    unsafe = realpathSync(unsafePath);
+  } catch {
+    unsafe = unsafePath;
+  }
+  const protectedPath = (path: string) => path === unsafe || path.startsWith(`${unsafe}/`);
+  if (protectedPath(directory)) throw new Error("refusing to inspect the protected infrastructure directory");
   const sources = readdirSync(directory)
     .filter((file) => file.endsWith(".tf"))
-    .map((file) => readFileSync(resolve(directory, file), "utf8"));
-  const source = sources.join("\n");
-  const block = source.match(/backend\s+"([\w-]+)"\s*\{([^{}]*)\}/);
+    .map((file) => {
+      const path = realpathSync(resolve(directory, file));
+      if (protectedPath(path)) throw new Error("refusing to inspect the protected infrastructure directory");
+      return readFileSync(path, "utf8");
+    });
+  const source = sources.join("\n").replace(/#.*|\/\/[^:\n].*|\/\*[\s\S]*?\*\//g, " ");
+  const terraformStart = source.search(/\bterraform\s*\{/);
+  const terraform = terraformStart < 0 ? undefined : source.slice(terraformStart);
+  const block = terraform?.match(/\bbackend\s+"([\w-]+)"\s*\{([^{}]*)\}/);
   if (!block) return undefined;
   const body = block[2]!;
   const value = (name: string) => body.match(new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`))?.[1];

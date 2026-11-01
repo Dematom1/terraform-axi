@@ -19,7 +19,6 @@ import { PLAN_ARGS, planCommand, usage as planUsage } from "./plan/command.js";
 import { DRIFT_ARGS, drift, driftUsage } from "./commands/drift.js";
 import { stateCommand } from "./commands/state.js";
 import { inspectBackend } from "./doctor/backend.js";
-import { explain } from "./doctor/explain.js";
 import { rules } from "./doctor/rules.js";
 
 const name = "terraform-axi";
@@ -71,18 +70,8 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     const module = args[0];
     const backend = module ? inspectBackend(module) : undefined;
     const diagnosis = backend ? rules(process.env, backend) : undefined;
-    let binary: unknown;
-    let diagnostic: string | undefined;
-    try {
-      const result = await run(config(), "");
-      binary = describeVersion(JSON.parse(result.stdout));
-    } catch (error) {
-      diagnostic = error instanceof Error ? error.message : String(error);
-    }
     return output({
       module: module ?? "not specified",
-      binary: binary ?? "unavailable",
-      ...(diagnostic ? { error: diagnostic, explanation: explain(diagnostic) } : {}),
       backend: backend
         ? { type: backend.type, reachability: "not probed (static-only; no init or state access)" }
         : "not configured or module not specified",
