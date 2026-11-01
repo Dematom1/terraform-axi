@@ -51,6 +51,8 @@ describe("state command", () => {
   });
 
   it("bounds lists, retains total, enriches full types, and reports empty state", async () => {
+    runOperation.mockResolvedValueOnce(result('module.foo["module.part"].aws_instance.web["a.b"]\n'));
+    expect(JSON.stringify(await invoke("list", "mod"))).toContain('"type":"aws_instance"');
     const addresses = Array.from({ length: 105 }, (_, i) => `terraform_data.item${i}`).join("\n");
     runOperation.mockResolvedValue(result(`${addresses}\n`));
     const output = await invoke("list", "mod");
@@ -58,11 +60,25 @@ describe("state command", () => {
     expect(output.resources as unknown[]).toHaveLength(100);
     expect(runOperation).toHaveBeenLastCalledWith(config, "mod", "state_list");
     runOperation
+      .mockResolvedValueOnce(result(addresses))
+      .mockResolvedValueOnce(
+        result(
+          state(
+            Array.from({ length: 105 }, (_, i) => ({ address: `terraform_data.item${i}`, type: "terraform_data" })),
+          ),
+        ),
+      );
+    const fullOutput = await invoke("list", "mod", "--full");
+    expect(fullOutput.total).toBe(105);
+    expect(fullOutput.resources as unknown[]).toHaveLength(100);
+    runOperation
       .mockResolvedValueOnce(result("terraform_data.secret\n"))
       .mockResolvedValueOnce(result(state([terraformData("terraform_data.secret", "hunter2")])));
     expect(JSON.stringify(await invoke("list", "mod", "--full"))).toContain("terraform_data");
-    runOperation.mockResolvedValue(result(""));
-    expect(await invoke("list", "mod")).toMatchObject({ status: "empty_state", total: 0 });
+    runOperation.mockClear();
+    runOperation.mockResolvedValueOnce(result(""));
+    expect(await invoke("list", "mod", "--full")).toMatchObject({ status: "empty_state", total: 0 });
+    expect(runOperation).toHaveBeenCalledOnce();
   });
 
   it("does not echo malformed state JSON", async () => {

@@ -64,6 +64,19 @@ describe("runner seam", () => {
     ).toEqual(["mod", "show", "-json"]);
     expect((await runOperation(config(`${wrapper} {module}`), "mod", "state_list")).stdout).not.toContain("pull");
   });
+  it("reports the bounded state-output limit instead of retrying the tool", async () => {
+    const terraform = join(dir, "terraform");
+    writeFileSync(
+      terraform,
+      '#!/bin/sh\nif [ "$1" = "version" ]; then printf \'{"terraform_version":"1.0"}\\n\'; else /usr/bin/head -c 68157440 /dev/zero; fi\n',
+      { mode: 0o700 },
+    );
+    chmodSync(terraform, 0o700);
+    vi.stubEnv("PATH", dir);
+    await expect(runOperation({ binary: "auto", modules: [] }, dir, "show_state")).rejects.toMatchObject({
+      message: "output limit exceeded",
+    });
+  });
   it("does not treat wrapper words or module names as Terraform operations", async () => {
     const wrapper = executable('printf \'{"terraform_version":"1.2.3"}\\n\'');
     const result = await run(config(`${wrapper} init {module}`), "test");

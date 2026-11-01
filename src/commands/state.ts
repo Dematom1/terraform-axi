@@ -16,8 +16,29 @@ function parse(raw: string) {
   }
 }
 function resourceType(address: string): string {
-  const parts = address.split(".");
-  return parts.at(-2)?.replace(/\[.*$/, "") ?? "unknown";
+  const parts: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let i = 0; i < address.length; i++) {
+    const char = address[i]!;
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+    } else if (depth > 0) {
+      if (char === '"') quoted = true;
+      else if (char === "[") depth++;
+      else if (char === "]") depth--;
+    } else if (char === "[") depth = 1;
+    else if (char === ".") {
+      parts.push(address.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(address.slice(start));
+  return parts.at(-2) ?? "unknown";
 }
 function distance(a: string, b: string): number {
   const row = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -47,12 +68,12 @@ export async function stateCommand(config: Config, argv: string[]): Promise<stri
     if (positional.length !== 1) throw new UsageError("usage: terraform-axi state list <module> [--full]");
     const module = positional[0]!;
     const addresses = (await runOperation(config, module, "state_list")).stdout.trim().split(/\r?\n/).filter(Boolean);
+    if (!addresses.length) return encode({ status: "empty_state", total: 0, resources: [] });
     let types = new Map<string, string>();
     if (full)
       types = new Map(
         parse((await runOperation(config, module, "show_state")).stdout).resources.map((r) => [r.address, r.type]),
       );
-    if (!addresses.length) return encode({ status: "empty_state", total: 0, resources: [] });
     return encode({
       resources: addresses
         .slice(0, 100)
