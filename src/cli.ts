@@ -93,7 +93,7 @@ const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};
-  for (const binary of c.binary === "auto" ? ["terraform", "tofu"] : [c.binary]) {
+  for (const binary of c.wrapper ? [] : c.binary === "auto" ? ["terraform", "tofu"] : [c.binary]) {
     try {
       const { execFileSync } = await import("node:child_process");
       const version: unknown = JSON.parse(
