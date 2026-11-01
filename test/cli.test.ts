@@ -1,4 +1,3 @@
-
 import { describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
 
