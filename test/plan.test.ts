@@ -174,9 +174,7 @@ describe("action decoding", () => {
     { actions: ["provider-action", "create", "delete"], raw: '["provider-action","create","delete"]' },
   ])("keeps replacement with extra action values %j", ({ actions, raw }) => {
     const events = planned({ resource, actions, reason: "cannot_update" });
-    expect(events.changes).toEqual([
-      { address: "x.y", type: "x", action: "REPLACE", reason: "cannot_update", raw },
-    ]);
+    expect(events.changes).toEqual([{ address: "x.y", type: "x", action: "REPLACE", reason: "cannot_update", raw }]);
     expect(classifyRisks(events)[0]?.flags).toEqual(["destroy", "replace(cannot_update)"]);
   });
 

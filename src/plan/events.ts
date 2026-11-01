@@ -70,9 +70,7 @@ export function decodeAction(change: Json): Decoded {
     const action = typeof parts[0] === "string" ? SINGLE.get(parts[0]) : undefined;
     if (action) return { action };
   } else if (parts.includes("create") && parts.includes("delete")) {
-    return parts.length === 2
-      ? { action: "REPLACE" }
-      : { action: "REPLACE", raw: rawText(value) };
+    return parts.length === 2 ? { action: "REPLACE" } : { action: "REPLACE", raw: rawText(value) };
   }
   return { action: "unknown", raw: rawText(value) };
 }
