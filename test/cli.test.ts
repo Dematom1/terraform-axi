@@ -131,6 +131,30 @@ describe("terraform-axi scaffold", () => {
     expect(result.stdout).not.toContain("NOT_IMPLEMENTED");
   });
 
+  it.each([
+    ["HTTP 403 download_cap_exceeded secret=do-not-print", "daily cap"],
+    ["InvalidAccessKeyId key=do-not-print", "key ID"],
+  ])("explains captured diagnostics without echoing secrets", (diagnostic, expected) => {
+    const result = spawnSync(
+      process.execPath,
+      [join(root, "dist", "bin", "terraform-axi.js"), "doctor", "--explain", "-"],
+      { input: diagnostic, encoding: "utf8", env: { ...process.env, AWS_ACCESS_KEY_ID: "", AWS_SECRET_ACCESS_KEY: "" } },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(expected);
+    expect(result.stdout).not.toContain("do-not-print");
+  });
+
+  it("returns an explicit unmatched result for unknown diagnostics", () => {
+    const result = spawnSync(
+      process.execPath,
+      [join(root, "dist", "bin", "terraform-axi.js"), "doctor", "--explain", "unrelated error"],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("matched: false");
+  });
+
   it("reports an unprobed wrapper without a module or suggested command", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");

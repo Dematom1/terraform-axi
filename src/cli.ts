@@ -19,6 +19,7 @@ import { PLAN_ARGS, planCommand, usage as planUsage } from "./plan/command.js";
 import { DRIFT_ARGS, drift, driftUsage } from "./commands/drift.js";
 import { stateCommand } from "./commands/state.js";
 import { inspectBackend } from "./doctor/backend.js";
+import { explain } from "./doctor/explain.js";
 import { rules } from "./doctor/rules.js";
 
 const name = "terraform-axi";
@@ -65,7 +66,18 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
   },
   doctor: async (args) => {
     if (args.length === 1 && args[0] === "--help")
-      return output({ usage: "terraform-axi doctor [module]", help: hints });
+      return output({ usage: "terraform-axi doctor [module] | --explain TEXT|-", help: hints });
+    if (args[0] === "--explain") {
+      if (args.length !== 2) throw new CliError("VALIDATION_ERROR: doctor --explain requires TEXT or -");
+      let diagnostic = args[1]!;
+      if (diagnostic === "-") {
+        const chunks: Buffer[] = [];
+        for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+        diagnostic = Buffer.concat(chunks).toString("utf8");
+      }
+      const explanation = explain(diagnostic);
+      return output({ matched: Boolean(explanation), ...(explanation ?? {}) });
+    }
     if (args.length > 1) throw new CliError("VALIDATION_ERROR: doctor accepts at most one module");
     const module = args[0];
     const backend = module ? inspectBackend(module) : undefined;
