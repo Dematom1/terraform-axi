@@ -18,6 +18,13 @@ describe("plan events, risk, and expectations", () => {
     });
     expect(events.summary).toMatchObject({ add: 1, change: 0, destroy: 0 });
   });
+  it("classifies sensitive outputs with string actions as secret risk", () => {
+    const events = parsePlanEvents(
+      '{"type":"outputs","outputs":{"token":{"sensitive":true,"action":"update"}}}',
+    );
+    expect(events.outputs[0]?.action).toBe("update");
+    expect(classifyRisks(events)[0]?.flags).toContain("secret");
+  });
   it("keeps no-op changes out of change and risk classification", () => {
     const events = parsePlanEvents('{"type":"planned_change","change":{"resource":{"addr":"x","resource_type":"terraform_data"},"actions":["no-op"]}}');
     expect(events.changes).toHaveLength(0);

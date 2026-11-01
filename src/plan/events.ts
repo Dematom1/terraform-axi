@@ -85,7 +85,9 @@ export function parsePlanEvents(jsonl: string): PlanEvents {
         if (!record(raw)) continue;
         const change = record(raw.change) ? raw.change : raw;
         const actions = Array.isArray(change.actions) ? change.actions : [];
-        result.outputs.push({ name, action: actionFor(actions) ?? "noop", sensitive: raw.sensitive === true });
+        const action =
+          typeof change.action === "string" ? actionName(change.action) : actionFor(actions);
+        result.outputs.push({ name, action: action ?? "noop", sensitive: raw.sensitive === true });
       }
     } else if (value.type === "diagnostic") result.diagnostics.push(value);
   }
@@ -93,6 +95,7 @@ export function parsePlanEvents(jsonl: string): PlanEvents {
 }
 
 function actionName(action: string): PlanAction | undefined {
+  if (action === "no-op") return undefined;
   if (action === "create") return "create";
   if (action === "update") return "update";
   if (action === "delete" || action === "remove") return "DESTROY";
