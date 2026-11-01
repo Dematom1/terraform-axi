@@ -7,6 +7,36 @@ import { describe, expect, it } from "vitest";
 const root = join(import.meta.dirname, "..");
 
 describe("terraform-axi scaffold", () => {
+  it("prepares the npm stage CLI before enabling OIDC for publish", () => {
+    const workflowPath = ".github/workflows/release-please.yml";
+    const inspectWorkflow = `
+      const fs = require("node:fs");
+      const yaml = require("js-yaml");
+      const jobs = yaml.load(fs.readFileSync(process.argv[1], "utf8")).jobs;
+      const build = jobs.build;
+      const publish = jobs.publish;
+      process.stdout.write(JSON.stringify({
+        npmSetup: build.steps.some((step) => step.run?.includes("npm@11.15.0")),
+        npmArtifact: build.steps.some((step) => step.uses?.includes("upload-artifact") && step.with?.path?.includes("npm-cli.tgz")),
+        publishHasOidc: publish.permissions["id-token"] === "write",
+        publishExtractsCli: publish.steps.some((step) => step.run?.includes("tar -xzf npm-cli.tgz")),
+        publishUsesCli: publish.steps.some((step) => step.run?.includes("npm-cli.js stage publish")),
+        publishInstallsNpm: publish.steps.some((step) => step.run?.includes("npm install")),
+      }));
+    `;
+    const result: Record<string, boolean> = JSON.parse(
+      execFileSync(process.execPath, ["-e", inspectWorkflow, workflowPath], { cwd: root, encoding: "utf8" }),
+    );
+    expect(result).toEqual({
+      npmSetup: true,
+      npmArtifact: true,
+      publishHasOidc: true,
+      publishExtractsCli: true,
+      publishUsesCli: true,
+      publishInstallsNpm: false,
+    });
+  });
+
   it.each(["no-mistakes-required", "guard-generated-files"])(
     "%s gates its release check on both commit identities",
     (workflowName) => {
@@ -27,11 +57,19 @@ describe("terraform-axi scaffold", () => {
       expect(contract.gateIf).toBe("steps.release.outputs.bot_only != 'true'");
 
       const fakeBin = mkdtempSync(join(tmpdir(), "release-check-test-"));
+      const fakeGh = join(fakeBin, "gh");
       const outputPath = join(fakeBin, "github-output");
-      writeFileSync(join(fakeBin, "gh"), "#!/bin/sh\nprintf '%s' \"$GH_FIXTURE\"\n", { mode: 0o700 });
+      writeFileSync(fakeGh, "#!/bin/sh\nprintf '%s' \"$GH_FIXTURE\"\n", { mode: 0o700 });
+      expect(contract.releaseRun).toContain("gh api");
+      const run = contract.releaseRun
+        .replace("gh api", `${JSON.stringify(fakeGh)} api`)
+        .replace(
+          "node scripts/release-bot-only.mjs",
+          `${JSON.stringify(process.execPath)} ${JSON.stringify(join(root, "scripts/release-bot-only.mjs"))}`,
+        );
       const checkWorkflow = (commits: string) => {
         writeFileSync(outputPath, "");
-        execFileSync("bash", ["-e", "-c", contract.releaseRun], {
+        execFileSync("bash", ["-e", "-c", run], {
           cwd: root,
           env: {
             ...process.env,
@@ -84,7 +122,7 @@ describe("terraform-axi scaffold", () => {
     expect(result.stdout).toContain("NOT_IMPLEMENTED");
   });
 
-  it("shows a wrapper version check command when no module is configured", () => {
+  it("reports an unprobed wrapper without a module or suggested command", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");
     mkdirSync(configDir, { recursive: true });
@@ -99,7 +137,8 @@ describe("terraform-axi scaffold", () => {
         encoding: "utf8",
         env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
       });
-      expect(output).toContain(`via wrapper: not probed; check with: ${wrapper} <module> version -json`);
+      expect(output).toContain("wrapper: not probed (no module configured)");
+      expect(output).not.toContain("<module>");
       expect(output).not.toContain("versions.auto");
       expect(output).not.toContain("9.9.9");
     } finally {

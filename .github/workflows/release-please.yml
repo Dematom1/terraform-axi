@@ -78,10 +78,18 @@ jobs:
       # prepack rebuilds and checks the generated skill before packing.
       - run: npm pack
 
+      # Install npm stage support before entering the OIDC-enabled publish job.
+      - run: |
+          npm install --global --prefix "$RUNNER_TEMP/npm-cli" npm@11.15.0
+          test "$("$RUNNER_TEMP/npm-cli/bin/npm" --version)" = 11.15.0
+          tar -czf npm-cli.tgz -C "$RUNNER_TEMP/npm-cli/lib/node_modules" npm
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package
-          path: terraform-axi-*.tgz
+          path: |
+            terraform-axi-*.tgz
+            npm-cli.tgz
           if-no-files-found: error
 
   publish:
@@ -101,7 +109,7 @@ jobs:
             *) echo "Manual publishing is allowed only from main or a v* tag" >&2; exit 1 ;;
           esac
 
-      # Node 24 bundles npm 11, which trusted publishing requires (>= 11.5.1).
+      # Trusted publishing requires npm >= 11.5.1; the staged npm CLI is unpacked from the build job.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
@@ -111,17 +119,19 @@ jobs:
         with:
           name: package
 
+      - run: tar -xzf npm-cli.tgz
+
       - name: Skip if version already exists
         id: version
         run: |
           version=$(tar -xOzf terraform-axi-*.tgz package/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
-          if npm view "terraform-axi@$version" version >/dev/null 2>&1; then
+          if node ./npm/bin/npm-cli.js view "terraform-axi@$version" version >/dev/null 2>&1; then
             echo "already_published=true" >> "$GITHUB_OUTPUT"
           fi
       - if: ${{ steps.version.outputs.already_published != 'true' }}
         name: Stage package for approval
         run: |
-          stage_output=$(npm stage publish ./terraform-axi-*.tgz --access public --provenance)
+          stage_output=$(node ./npm/bin/npm-cli.js stage publish ./terraform-axi-*.tgz --access public --provenance)
           printf '%s\n' "$stage_output"
           version=$(tar -xOzf terraform-axi-*.tgz package/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
           stage_id=$(printf '%s\n' "$stage_output" | sed -nE 's/.*staged with id ([^)]*).*/\1/p' | tail -n1)
