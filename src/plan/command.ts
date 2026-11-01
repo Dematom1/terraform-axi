@@ -17,6 +17,7 @@ const FAILED_EXIT = 1;
 export const usage =
   "terraform-axi plan <module> [--expect add=N,change=N,destroy=N] [--binary terraform|tofu] [--timeout seconds] [--full] | terraform-axi plan --plan-json <file> [--expect ...] [--full]";
 const DEFAULT_TIMEOUT_SECONDS = 30 * 60;
+const MAX_TIMEOUT_SECONDS = 2_147_483;
 const LOW_RISK_SHOWN = 25;
 const DETAIL_CHARS = 300;
 
@@ -187,6 +188,8 @@ export function parsePlanArgs(args: string[]): {
   const timeout = timeoutText === undefined ? DEFAULT_TIMEOUT_SECONDS : Number(timeoutText);
   if (!/^\d+$/.test(timeoutText ?? "1") || !Number.isSafeInteger(timeout) || timeout < 1)
     throw new UsageError(`--timeout must be a whole number of seconds, got ${timeoutText}`);
+  if (timeout > MAX_TIMEOUT_SECONDS)
+    throw new UsageError(`--timeout must not exceed ${MAX_TIMEOUT_SECONDS} seconds`);
   let expected: ExpectedCounts | undefined;
   const spec = parsed.values["--expect"]?.[0];
   if (spec !== undefined) {

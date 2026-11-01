@@ -333,6 +333,7 @@ describe("plan <module> through the configured runner", () => {
     [["plan", "m", "--expect", "remove=1"], 'key "remove" is unknown'],
     [["plan", "m", "--timeout", "0"], "--timeout must be a whole number"],
     [["plan", "m", "--timeout", "1.5"], "--timeout must be a whole number"],
+    [["plan", "m", "--timeout", "2147484"], "must not exceed 2147483 seconds"],
     [["plan", "m", "--binary", "auto"], "invalid value for --binary"],
     [["plan", "--plan-json", "x.json", "--binary", "tofu"], "apply only to plan <module>"],
   ])("rejects %j before running anything", (args, message) => {
