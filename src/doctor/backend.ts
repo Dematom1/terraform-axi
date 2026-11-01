@@ -122,7 +122,8 @@ export function inspectBackend(module: string): Backend | undefined {
   }
   if (body === undefined || !backendType) return undefined;
   const values = maskComments(body);
-  const value = (name: string) => values.match(new RegExp(`\\b${name}\\s*=\\s*"((?:\\\\.|[^"\\\\])*)"`))?.[1];
+  const value = (name: string, source = values) =>
+    source.match(new RegExp(`\\b${name}\\s*=\\s*"((?:\\\\.|[^"\\\\])*)"`))?.[1];
   const flags: Backend["flags"] = {};
   for (const name of [
     "skip_credentials_validation",
@@ -133,7 +134,11 @@ export function inspectBackend(module: string): Backend | undefined {
     "use_path_style",
   ] as const)
     flags[name] = new RegExp(`\\b${name}\\s*=\\s*true\\b`).test(maskSyntax(body));
-  const endpoint = value("endpoint");
+  const structureBody = maskSyntax(body);
+  const endpointsStart = /\bendpoints\s*=/.exec(structureBody)?.index;
+  const endpointsRange = endpointsStart === undefined ? undefined : blockRange(structureBody, endpointsStart);
+  const endpoint =
+    value("endpoint") ?? (endpointsRange ? value("s3", values.slice(endpointsRange[0], endpointsRange[1])) : undefined);
   let endpointHost: string | undefined;
   try {
     endpointHost = endpoint ? new URL(endpoint).hostname : undefined;

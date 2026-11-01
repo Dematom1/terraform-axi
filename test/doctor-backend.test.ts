@@ -28,6 +28,16 @@ describe("static backend inspection", () => {
     expect(JSON.stringify(result)).not.toContain("never-return-this");
   });
 
+  it("reads the S3 endpoint from the endpoints map", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(
+      join(directory, "main.tf"),
+      'terraform { backend "s3" { endpoints = { s3 = "https://s3.us-west-004.backblazeb2.com" } region = "us-west-004" } }',
+    );
+    expect(inspectBackend(directory)).toMatchObject({ endpointHost: "s3.us-west-004.backblazeb2.com" });
+  });
+
   it("keeps metadata offsets correct after non-BMP text", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
