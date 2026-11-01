@@ -7,6 +7,7 @@ import {
 } from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,10 +28,39 @@ function output(value: unknown): string {
 }
 const hints = ["Run `terraform-axi setup` to configure Terraform/OpenTofu", "Run `terraform-axi --help` for commands"];
 const commands: Record<string, AxiCliCommand<undefined>> = {
-  plan: async (args) =>
-    output({ status: "not implemented in scaffold", requested: args[0] ?? "<module>", help: hints }),
+  plan: async (args) => {
+    const module = args.find((arg) => !arg.startsWith("--"));
+    if (!module) throw new Error("Usage: terraform-axi plan <module> [--expect add=N,change=N,destroy=N]");
+    const c = config();
+    const binary = c.binary === "auto" ? "terraform" : c.binary;
+    const lines = execFileSync(c.wrapper ?? binary, [...(c.wrapper ? [binary] : []), "plan", "-input=false", "-no-color", "-json"], { cwd: module, encoding: "utf8", timeout: 120_000 }).trim().split("\\n");
+    const changes = { add: 0, change: 0, destroy: 0, replace: 0 };
+    for (const line of lines) {
+      const event: unknown = JSON.parse(line);
+      if (!event || typeof event !== "object" || !("type" in event) || event.type !== "planned_change" || !("change" in event)) continue;
+      const actions = (event.change as { action?: unknown }).action;
+      if (!Array.isArray(actions)) continue;
+      if (actions.includes("create")) changes.add++;
+      if (actions.includes("update")) changes.change++;
+      if (actions.includes("delete")) changes.destroy++;
+      if (actions.includes("create") && actions.includes("delete")) changes.replace++;
+    }
+    const expectation = args.find((arg) => arg.startsWith("--expect="))?.slice(9) ?? (args.includes("--expect") ? args[args.indexOf("--expect") + 1] : undefined);
+    if (expectation) {
+      const expected = Object.fromEntries(expectation.split(",").map((part) => part.split("=")));
+      const mismatches = Object.entries(expected).filter(([key, value]) => !(key in changes) || changes[key as keyof typeof changes] !== Number(value)).map(([key, value]) => `${key}: expected ${value}, got ${key in changes ? changes[key as keyof typeof changes] : 0}`);
+      return output({ ...changes, assertion: mismatches.length ? "fail" : "pass", reasons: mismatches });
+    }
+    return output(changes);
+  },
   drift: async () => output({ status: "not implemented in scaffold", help: hints }),
-  doctor: async () => output({ status: "not implemented in scaffold", help: hints }),
+  doctor: async () => {
+    const c = config();
+    const binary = c.binary === "auto" ? "terraform" : c.binary;
+    let binaryAvailable = false;
+    try { execFileSync(c.wrapper ?? binary, [...(c.wrapper ? [binary] : []), "version"], { stdio: "ignore", timeout: 2000 }); binaryAvailable = true; } catch { /* reported below */ }
+    return output({ binary: binaryAvailable ? "reachable" : "not found", backend: "not checked (no module selected)", credentials: Object.keys(process.env).filter((key) => /^(AWS|B2)_/.test(key)), precedence: "AWS_* takes precedence over B2_*" });
+  },
   state: async (args) =>
     output({
       status: "not implemented in scaffold",
