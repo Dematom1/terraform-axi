@@ -86,6 +86,32 @@ describe.each([
   });
 });
 
+describe("show -json action completeness", () => {
+  it("does not trust dropped or unknown resource and output actions", () => {
+    const dropped = parsePlanFile(
+      JSON.stringify({
+        planned_values: {},
+        resource_changes: [{ address: "x", change: { actions: ["no-op"] } }],
+        resource_drift: [{ address: "y", type: "x", change: { actions: ["future-action"] } }],
+        output_changes: { token: { actions: ["future-action"] } },
+      }),
+    );
+    expect(dropped.changes).toEqual([]);
+    expect(dropped.malformed).toBe(1);
+    expect(dropped.summary).toBe("unavailable");
+
+    const unknownResource = parsePlanFile(
+      JSON.stringify({
+        planned_values: {},
+        resource_changes: [{ address: "x", change: { actions: ["future-action"] } }],
+      }),
+    );
+    expect(unknownResource.changes[0]?.action).toBe("unknown");
+    expect(unknownResource.malformed).toBe(1);
+    expect(unknownResource.summary).toBe("unavailable");
+  });
+});
+
 describe("plan --plan-json risk flags", () => {
   it("flags destroys, replacements, IAM, secrets, sensitive outputs, and unknown actions", () => {
     const { status, report, stdout } = tfaxi(["plan", "--plan-json", planFixture("risk-flags-show.json")]);

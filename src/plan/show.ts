@@ -59,7 +59,13 @@ export function parseShowDocument(doc: Json): PlanEvents {
         malformed++;
         return [];
       }
-      return decodeResource(entry) ?? [];
+      const row = decodeResource(entry);
+      if (!row) {
+        if (decodeAction(entry.change).action !== "noop") malformed++;
+        return [];
+      }
+      if (row.action === "unknown") malformed++;
+      return [row];
     });
   };
   const changes = rows(doc.resource_changes);
@@ -91,7 +97,10 @@ export function parseShowDocument(doc: Json): PlanEvents {
   // (an empty plan omits `resource_changes`). An errored plan, or one with an action this decoder cannot
   // count, gets none rather than a guessed number.
   const summary =
-    doc.errored === true || malformed > 0 || changes.some((row) => row.action === "unknown")
+    doc.errored === true ||
+    malformed > 0 ||
+    changes.some((row) => row.action === "unknown") ||
+    outputs.some((row) => row.action === "unknown")
       ? ("unavailable" as const)
       : {
           add: tally("create", "REPLACE"),
