@@ -37,7 +37,7 @@ export function validateWrapper(wrapper: string): void {
 }
 
 export function wrapperArgs(wrapper: string, module: string, args: string[]): [string, string[]] {
-  if (/[|;&$`<>(){}*?!\[\]\\'"\r\n]/.test(wrapper.replaceAll("{module}", "")))
+  if (/[|;&$`(){}*?![\]\\'"\r\n]/.test(wrapper.replaceAll("{module}", "")))
     throw new CliError("wrapper contains shell metacharacters; use a script");
   const words = wrapper.trim().split(/\s+/).filter(Boolean);
   const indexes = words.flatMap((word, i) => (word === "{module}" ? [i] : []));
@@ -50,7 +50,9 @@ export function wrapperArgs(wrapper: string, module: string, args: string[]): [s
   words[indexes[0]!] = module;
   return [words[0]!, [...words.slice(1), ...args]];
 }
-async function resolveBinary(binary: Config["binary"]): Promise<{ binary: "terraform" | "tofu"; fallbackReason?: string }> {
+async function resolveBinary(
+  binary: Config["binary"],
+): Promise<{ binary: "terraform" | "tofu"; fallbackReason?: string }> {
   if (binary !== "auto") return { binary };
   let terraformError: unknown;
   try {
@@ -61,9 +63,8 @@ async function resolveBinary(binary: Config["binary"]): Promise<{ binary: "terra
   }
   try {
     await execute("tofu", versionArgs, { timeout: 2_000, env: process.env });
-    const code = terraformError && typeof terraformError === "object" && "code" in terraformError
-      ? terraformError.code
-      : "failed";
+    const code =
+      terraformError && typeof terraformError === "object" && "code" in terraformError ? terraformError.code : "failed";
     return {
       binary: "tofu",
       fallbackReason: `Terraform probe failed: ${code === "ENOENT" ? "not found" : code === "EACCES" ? "not executable" : code === "ETIMEDOUT" ? "timeout" : "failed"}`,
@@ -71,11 +72,18 @@ async function resolveBinary(binary: Config["binary"]): Promise<{ binary: "terra
   } catch (error) {
     const code = error && typeof error === "object" && "code" in error ? error.code : "failed";
     const fallbackMissing = code === "ENOENT";
-    const terraformCode = terraformError && typeof terraformError === "object" && "code" in terraformError
-      ? terraformError.code
-      : "failed";
+    const terraformCode =
+      terraformError && typeof terraformError === "object" && "code" in terraformError ? terraformError.code : "failed";
     const failure = fallbackMissing && terraformCode !== "ENOENT" ? terraformCode : code;
-    throw new CliError(failure === "ENOENT" ? "not found" : failure === "EACCES" ? "not executable" : failure === "ETIMEDOUT" ? "timeout" : "failed");
+    throw new CliError(
+      failure === "ENOENT"
+        ? "not found"
+        : failure === "EACCES"
+          ? "not executable"
+          : failure === "ETIMEDOUT"
+            ? "timeout"
+            : "failed",
+    );
   }
 }
 
@@ -118,7 +126,6 @@ export async function run(
     const timedOut =
       ("killed" in record && record.killed === true) || ("signal" in record && record.signal === "SIGKILL");
     const stdout = "stdout" in record && typeof record.stdout === "string" ? record.stdout : "";
-    const stderr = "stderr" in record && typeof record.stderr === "string" ? record.stderr : "";
     const diagnostics = stdout.split("\n").flatMap((line) => {
       try {
         const event: unknown = JSON.parse(line);

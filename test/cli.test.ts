@@ -162,11 +162,7 @@ describe("terraform-axi scaffold", () => {
     const configDir = join(home, ".config", "terraform-axi");
     mkdirSync(configDir, { recursive: true });
     const wrapper = join(home, "wrapper-executable");
-    writeFileSync(
-      wrapper,
-      `#!/bin/sh\nprintf '{"${field}":"9.9.9"}\\n'\n`,
-      { mode: 0o700 },
-    );
+    writeFileSync(wrapper, `#!/bin/sh\nprintf '{"${field}":"9.9.9"}\\n'\n`, { mode: 0o700 });
     writeFileSync(
       join(configDir, "config.json"),
       JSON.stringify({ binary: "auto", modules: ["module-a"], wrapper: `${wrapper} {module}` }),
@@ -185,12 +181,20 @@ describe("terraform-axi scaffold", () => {
 
   it("shows why auto mode falls back to OpenTofu", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
-    writeFileSync(join(home, "terraform"), `#!/bin/sh
+    writeFileSync(
+      join(home, "terraform"),
+      `#!/bin/sh
 exit 1
-`, { mode: 0o700 });
-    writeFileSync(join(home, "tofu"), `#!/bin/sh
+`,
+      { mode: 0o700 },
+    );
+    writeFileSync(
+      join(home, "tofu"),
+      `#!/bin/sh
 printf '{"tofu_version":"1.2.3"}\\n'
-`, { mode: 0o700 });
+`,
+      { mode: 0o700 },
+    );
     try {
       const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
         encoding: "utf8",
