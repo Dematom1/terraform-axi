@@ -98,15 +98,28 @@ async function home(): Promise<string> {
     try {
       const { execFileSync } = await import("node:child_process");
       const args = ["version", "-json"];
-      const [executable, ...wrapperArgs] = c.wrapper?.trim().split(/\s+/) ?? [];
+      const wrapperParts = c.wrapper?.trim().split(/\s+/) ?? [];
+      const moduleToken = wrapperParts.indexOf("{module}");
+      const wrapperArgs =
+        moduleToken < 0
+          ? [...wrapperParts.slice(1), ...args]
+          : wrapperParts.slice(1).map((arg, index) => (index === moduleToken - 1 ? "version" : arg)).concat("-json");
       const rawVersion = c.wrapper
-        ? execFileSync(executable ?? "", [...wrapperArgs, ...args], { encoding: "utf8", timeout: 2000 })
+        ? execFileSync(wrapperParts[0] ?? "", wrapperArgs, { encoding: "utf8", timeout: 2000 })
         : execFileSync(binary, args, { encoding: "utf8", timeout: 2000 });
       const version: unknown = JSON.parse(rawVersion);
-      versions[binary] =
+      const detectedBinary =
+        c.wrapper && version && typeof version === "object" && "tofu_version" in version
+          ? "tofu"
+          : c.wrapper && c.binary === "auto"
+            ? "terraform"
+            : binary;
+      versions[detectedBinary] =
         version && typeof version === "object" && "terraform_version" in version
           ? String(version.terraform_version)
-          : "version available";
+          : version && typeof version === "object" && "tofu_version" in version
+            ? String(version.tofu_version)
+            : "version available";
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
       versions[binary] =
