@@ -120,7 +120,7 @@ export function inspectBackend(module: string): Backend | undefined {
     body = source.slice(terraformRange[0] + backendRange[0], terraformRange[0] + backendRange[1]);
     if (body && backendType) break;
   }
-  if (!body || !backendType) return undefined;
+  if (body === undefined || !backendType) return undefined;
   const values = maskComments(body);
   const value = (name: string) => values.match(new RegExp(`\\b${name}\\s*=\\s*"((?:\\\\.|[^"\\\\])*)"`))?.[1];
   const flags: Backend["flags"] = {};
