@@ -22,8 +22,8 @@ const configPath = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"
 const claudeSettingsPath = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "settings.json");
 const cliUrl = fileURLToPath(import.meta.url);
 const cliDir = dirname(cliUrl);
-const outputDir = cliUrl.endsWith(".ts") ? join(dirname(cliDir), "dist") : dirname(cliDir);
-const sessionEndCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(join(outputDir, "bin", "terraform-axi-session-end.js"))} # ${name}-session-end`;
+const sessionEndPath = join(cliDir, "..", cliUrl.endsWith(".ts") ? "dist/bin" : "bin", "terraform-axi-session-end.js");
+const sessionEndCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(sessionEndPath)} # ${name}-session-end`;
 function readClaudeSettings(): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(readFileSync(claudeSettingsPath, "utf8"));
