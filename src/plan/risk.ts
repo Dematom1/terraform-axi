@@ -3,14 +3,7 @@ import type { PlanAction, PlanChange, PlanEvents } from "./events.js";
 export type RiskFlag = "destroy" | `replace(${string})` | "iam" | "secret";
 export type RiskRow = PlanChange & { flags: RiskFlag[]; level: "high" | "low" };
 
-const iamTypes = [
-  "aws_iam_",
-  "google_",
-  "azurerm_role_assignment",
-  "azurerm_role_definition",
-  "kubernetes_",
-  "github_",
-];
+const iamTypes = ["aws_iam_", "azurerm_role_assignment", "azurerm_role_definition"];
 const secretTypes = [
   "aws_secretsmanager_",
   "aws_ssm_parameter",
@@ -23,7 +16,6 @@ const secretTypes = [
   "random_password",
   "tls_private_key",
   "b2_application_key",
-  "github_actions_",
 ];
 const highAction = new Set<PlanAction>(["DESTROY", "REPLACE"]);
 
@@ -35,23 +27,16 @@ export function classifyRisks(events: PlanEvents): RiskRow[] {
       if (highAction.has(change.action)) flags.push("destroy");
       if (change.action === "REPLACE") flags.push(`replace(${change.reason ?? "unknown"})`);
       if (
-        iamTypes.some((prefix) => type.startsWith(prefix)) &&
-        (type.startsWith("google_")
-          ? type.includes("_iam_") || type.startsWith("google_project_iam_")
-          : type.startsWith("kubernetes_")
-            ? type.includes("role")
-            : type.startsWith("github_")
-              ? type.includes("_permission")
-              : true)
-      )
-        flags.push("iam");
+        iamTypes.some((prefix) => type.startsWith(prefix)) ||
+        (/^google_(?:[^_]+_iam_|project_iam_)/.test(type)) ||
+        (type.startsWith("kubernetes_") && type.includes("role")) ||
+        (/^github_.+_permission/.test(type))
+      ) flags.push("iam");
       if (
         secretTypes.some((prefix) => type.startsWith(prefix)) &&
-        (type.startsWith("github_actions_")
-          ? type.includes("secret")
-          : type.startsWith("kubernetes_secret") || !type.startsWith("kubernetes_"))
-      )
-        flags.push("secret");
+        (type.startsWith("kubernetes_secret") || !type.startsWith("kubernetes_")) ||
+        (type.startsWith("github_actions_") && type.includes("secret"))
+      ) flags.push("secret");
       return { ...change, flags, level: flags.length ? ("high" as const) : ("low" as const) };
     })
     .concat(

@@ -18,6 +18,17 @@ describe("plan events, risk, and expectations", () => {
     });
     expect(events.summary).toMatchObject({ add: 1, change: 0, destroy: 0 });
   });
+  it("keeps no-op changes out of change and risk classification", () => {
+    const events = parsePlanEvents('{"type":"planned_change","change":{"resource":{"addr":"x","resource_type":"terraform_data"},"actions":["no-op"]}}');
+    expect(events.changes).toHaveLength(0);
+    const output = parsePlanEvents('{"type":"outputs","outputs":{"token":{"sensitive":true,"change":{"actions":["no-op"]}}}}');
+    expect(classifyRisks(output)).toHaveLength(0);
+  });
+  it("treats incomplete summaries as unavailable", () => {
+    const events = parsePlanEvents('{"type":"change_summary","changes":{"import":1}}');
+    expect(events.summary).toBe("unavailable");
+    expect(evaluateExpect(parseExpect("add=0"), events).status).toBe("fail");
+  });
   it("rejects malformed lines without retaining their contents and treats absent summaries as unavailable", () => {
     const events = parsePlanEvents('{garbage secret}\n{"type":"diagnostic","message":"bad"}');
     expect(events.malformed).toBe(1);
@@ -37,6 +48,21 @@ describe("plan events, risk, and expectations", () => {
     const failed = evaluateExpect(parseExpect("destroy=1"), events);
     expect(failed.status).toBe("fail");
     expect(failed.reasons[0]).toContain("expected 1, planned 0");
+  });
+  it.each(["google_iam", "github_permission"])(
+    "does not overmatch IAM type %s",
+    (type) => {
+      const events = parsePlanEvents(
+        `{"type":"planned_change","change":{"resource":{"addr":"x","resource_type":"${type}"},"action":"create"}}`,
+      );
+      expect(classifyRisks(events)[0]?.flags).not.toContain("iam");
+    },
+  );
+  it("does not classify non-secret GitHub Actions resources as secrets", () => {
+    const events = parsePlanEvents(
+      '{"type":"planned_change","change":{"resource":{"addr":"x","resource_type":"github_actions_workflow"},"action":"create"}}',
+    );
+    expect(classifyRisks(events)[0]?.flags).not.toContain("secret");
   });
   it.each([
     "aws_iam_role",

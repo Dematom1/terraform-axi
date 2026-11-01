@@ -20,9 +20,9 @@ export function evaluateExpect(expected: ExpectedCounts, events: PlanEvents): Ex
   if (events.summary === "unavailable")
     return { status: "fail", reasons: ["planned counts unavailable (missing change_summary)"] };
   const counts = {
-    add: events.summary.add ?? 0,
-    change: events.summary.change ?? 0,
-    destroy: events.summary.destroy ?? events.summary.remove ?? 0,
+    add: events.summary.add,
+    change: events.summary.change,
+    destroy: events.summary.destroy ?? events.summary.remove,
   };
   const reasons = Object.entries(expected).flatMap(([key, count]) => {
     const planned = counts[key as keyof typeof counts];

@@ -71,10 +71,15 @@ export function parsePlanEvents(jsonl: string): PlanEvents {
         (value.type === "resource_drift" ? result.drift : result.changes).push(row);
       }
     } else if (value.type === "change_summary" && record(value.changes)) {
-      const summary: Record<string, number> = {};
-      for (const [key, count] of Object.entries(value.changes))
-        if (typeof count === "number" && Number.isInteger(count)) summary[key === "remove" ? "destroy" : key] = count;
-      result.summary = summary;
+      const changes = value.changes;
+      const add = changes.add;
+      const change = changes.change;
+      const destroy = changes.destroy ?? changes.remove;
+      if (
+        typeof add === "number" && Number.isInteger(add) && add >= 0 &&
+        typeof change === "number" && Number.isInteger(change) && change >= 0 &&
+        typeof destroy === "number" && Number.isInteger(destroy) && destroy >= 0
+      ) result.summary = { add, change, destroy };
     } else if (value.type === "outputs" && record(value.outputs)) {
       for (const [name, raw] of Object.entries(value.outputs)) {
         if (!record(raw)) continue;
@@ -106,7 +111,7 @@ function actionFor(actions: unknown[]): PlanAction | undefined {
   if (first === "update") return "update";
   if (first === "delete") return "DESTROY";
   if (first === "read") return "read";
-  if (first === "no-op") return "update";
+  if (first === "no-op") return undefined;
   if (first === "forget") return "forget";
   if (first === "move") return "move";
   if (first === "import") return "import";
