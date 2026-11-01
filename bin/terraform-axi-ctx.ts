@@ -3,6 +3,7 @@ import { encode } from "@toon-format/toon";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { lastSession } from "../src/sessions.js";
 const path = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "terraform-axi", "config.json");
 let config: { binary: "terraform" | "tofu" | "auto"; modules: string[] } = { binary: "auto", modules: [] };
 try {
@@ -20,4 +21,4 @@ try {
 } catch {
   /* missing config is a valid first-run state */
 }
-process.stdout.write(`${encode({ terraform_axi: { config, writes: "never", hints: ["Run terraform-axi setup"] } })}\n`);
+process.stdout.write(`${encode({ terraform_axi: { binary: config.binary, modules: config.modules, last_session: lastSession(), writes: "never" } })}\n`);
