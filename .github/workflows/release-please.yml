@@ -1,0 +1,144 @@
+name: release-please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_current:
+        description: Publish the current version if it is not already on npm
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    if: ${{ github.event_name != 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    # No GITHUB_TOKEN scopes are needed; the action uses the GitHub App token from app-token.
+    permissions: {}
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Check release app secrets
+        env:
+          RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$RELEASE_APP_ID" || -z "$RELEASE_APP_PRIVATE_KEY" ]]; then
+            echo "::error::Missing RELEASE_APP_ID or RELEASE_APP_PRIVATE_KEY repository secrets. Create a GitHub App with only Contents and Pull requests read/write, install it on this repository, and save its App ID and private key as these secrets." >&2
+            exit 1
+          fi
+
+      - uses: actions/create-github-app-token@0f859bf9e69e887678d5bbfbee594437cb440ffe # v2.1.4
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+  # Installing and building runs dependency code, so it happens here with a
+  # read-only token and no OIDC access; publish only uploads the tarball.
+  # Separate jobs also make a failed build or publish retryable with
+  # "Re-run failed jobs", which reuses release-please's outputs.
+  build:
+    needs: release-please
+    if: ${{ always() && (needs.release-please.outputs.release_created || inputs.publish_current) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # prepack rebuilds and checks the generated skill before packing.
+      - run: npm pack
+
+      # Install npm stage support before entering the OIDC-enabled publish job.
+      - run: |
+          npm install --global --prefix "$RUNNER_TEMP/npm-cli" npm@11.15.0
+          test "$("$RUNNER_TEMP/npm-cli/bin/npm" --version)" = 11.15.0
+          tar -czf npm-cli.tgz -C "$RUNNER_TEMP/npm-cli/lib/node_modules" npm
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package
+          path: |
+            terraform-axi-*.tgz
+            npm-cli.tgz
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      # npm trusted publishing: npm exchanges this OIDC token for a short-lived
+      # publish credential and signs provenance, so no npm token is stored.
+      id-token: write
+    steps:
+      - name: Validate manual publish ref
+        if: ${{ inputs.publish_current }}
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/main|refs/tags/v*) ;;
+            *) echo "Manual publishing is allowed only from main or a v* tag" >&2; exit 1 ;;
+          esac
+
+      # Trusted publishing requires npm >= 11.5.1; the staged npm CLI is unpacked from the build job.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package
+
+      - run: tar -xzf npm-cli.tgz
+
+      - name: Skip if version already exists
+        id: version
+        run: |
+          version=$(tar -xOzf terraform-axi-*.tgz package/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+          if node ./npm/bin/npm-cli.js view "terraform-axi@$version" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: ${{ steps.version.outputs.already_published != 'true' }}
+        name: Stage package for approval
+        run: |
+          stage_output=$(node ./npm/bin/npm-cli.js stage publish ./terraform-axi-*.tgz --access public --provenance)
+          printf '%s\n' "$stage_output"
+          version=$(tar -xOzf terraform-axi-*.tgz package/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+          stage_id=$(printf '%s\n' "$stage_output" | sed -nE 's/.*staged with id ([^)]*).*/\1/p' | tail -n1)
+          stage_id=${stage_id:-unavailable}
+          {
+            echo "Stage id: $stage_id"
+            echo "Package: terraform-axi"
+            echo "Version: $version"
+            echo "Waiting for approval: run axi-approve"
+          } >> "$GITHUB_STEP_SUMMARY"

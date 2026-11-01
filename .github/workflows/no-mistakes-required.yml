@@ -1,0 +1,41 @@
+name: Require no-mistakes
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    name: PR must be raised via no-mistakes
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.user.login != 'github-actions[bot]' &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Check release-please commits
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          RELEASE_APP_BOT_LOGIN: ${{ vars.RELEASE_APP_BOT_LOGIN }}
+        run: |
+          commits=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/commits" --jq '.[] | [.author.login // "MISSING", .committer.login // "MISSING", (.commit.verification.verified // false | tostring)] | @tsv')
+          bot_only=$(printf '%s\n' "$commits" | node scripts/release-bot-only.mjs)
+          echo "bot_only=$bot_only" >> "$GITHUB_OUTPUT"
+      - name: Verify no-mistakes signature and pipeline attestation in PR body
+        if: steps.release.outputs.bot_only != 'true'
+        uses: kunchenguid/no-mistakes/.github/actions/require-no-mistakes@f6441c96c352a18b9cadcaef6b6c7017e9ac3970 # v1.80.1
