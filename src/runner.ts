@@ -19,6 +19,10 @@ export function assertAllowed(args: string[]): void {
   if (args.some((arg) => denied.has(arg) || arg.startsWith("-out=")))
     throw new CliError("unsupported Terraform argument");
 }
+export function validateWrapper(wrapper: string): void {
+  wrapperArgs(wrapper, "module", []);
+}
+
 function wrapperArgs(wrapper: string, module: string, args: string[]): [string, string[]] {
   if (/[|;&$`<>\r\n]/.test(wrapper)) throw new CliError("wrapper contains shell metacharacters; use a script");
   const words =

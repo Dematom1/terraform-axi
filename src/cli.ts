@@ -6,30 +6,18 @@ import {
   type AxiCliCommand,
 } from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION } from "./version.js";
+import { parseArgs } from "./args.js";
+import { readConfig, writeConfig, type Config } from "./config.js";
+import { validateWrapper } from "./runner.js";
 
 const name = "terraform-axi";
 const configPath = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), name, "config.json");
-type Config = { binary: "terraform" | "tofu" | "auto"; wrapper?: string; modules: string[] };
 function config(): Config {
-  try {
-    const saved: unknown = JSON.parse(readFileSync(configPath, "utf8"));
-    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return { binary: "auto", modules: [] };
-    const binary =
-      "binary" in saved && (saved.binary === "terraform" || saved.binary === "tofu") ? saved.binary : "auto";
-    const modules =
-      "modules" in saved && Array.isArray(saved.modules) && saved.modules.every((module) => typeof module === "string")
-        ? saved.modules
-        : [];
-    const wrapper = "wrapper" in saved && typeof saved.wrapper === "string" ? { wrapper: saved.wrapper } : {};
-    return { binary, modules, ...wrapper };
-  } catch {
-    return { binary: "auto", modules: [] };
-  }
+  return readConfig(configPath);
 }
 function output(value: unknown): string {
   return encode(value);
@@ -97,7 +85,17 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
   drift: async () => notImplemented(),
   doctor: async () => notImplemented(),
   state: async () => notImplemented(),
+  update: async (args) => {
+    if (args.length === 1 && args[0] === "--help") return output({ usage: "terraform-axi update", help: hints });
+    return notImplemented();
+  },
   setup: async (args) => {
+    if (args.length === 1 && args[0] === "--help")
+      return output({
+        usage:
+          "terraform-axi setup [--binary terraform|tofu|auto] [--wrapper command] [--module name] [--remove-module name]",
+        help: hints,
+      });
     if (args[0] === "status")
       return output({
         config: configPath,
@@ -123,15 +121,22 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
         help: hints,
       });
     }
+    const parsed = parseArgs(args, [
+      { name: "--binary", values: ["terraform", "tofu", "auto"] },
+      { name: "--wrapper" },
+      { name: "--module", repeatable: true },
+      { name: "--remove-module", repeatable: true },
+    ]);
     const settings = config();
-    const option = args.indexOf("--binary");
-    if (option >= 0 && ["terraform", "tofu", "auto"].includes(args[option + 1] ?? ""))
-      settings.binary = args[option + 1] as Config["binary"];
-    const wrapper = args.indexOf("--wrapper");
-    const wrapperValue = wrapper >= 0 ? args[wrapper + 1] : undefined;
-    if (wrapperValue) settings.wrapper = wrapperValue;
-    mkdirSync(join(configPath, ".."), { recursive: true, mode: 0o700 });
-    writeFileSync(configPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+    if (parsed.values["--binary"]?.[0]) settings.binary = parsed.values["--binary"][0] as Config["binary"];
+    if (parsed.values["--wrapper"]?.[0]) {
+      validateWrapper(parsed.values["--wrapper"][0]!);
+      settings.wrapper = parsed.values["--wrapper"][0]!;
+    }
+    settings.modules = [...new Set([...settings.modules, ...(parsed.values["--module"] ?? [])])];
+    for (const remove of parsed.values["--remove-module"] ?? [])
+      settings.modules = settings.modules.filter((module) => module !== remove);
+    writeConfig(configPath, settings);
     return output({
       setup: "configured",
       config: configPath,
@@ -140,7 +145,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
 };
-const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary (coming soon)\n  drift: detect drift (coming soon)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted (coming soon)\n  setup: configure binary and optional wrapper; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
+const help = `usage: terraform-axi <command> [args]\ncommands[7]:\n  (none)=home, plan, drift, doctor, state, setup, update\nsummary[7]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary (coming soon)\n  drift: detect drift (coming soon)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted (coming soon)\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\n  update: check for updates (not implemented)\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};

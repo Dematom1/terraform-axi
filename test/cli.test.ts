@@ -224,17 +224,18 @@ describe("terraform-axi scaffold", () => {
     }
   });
 
-  it("ignores an invalid saved modules value in the built CLI", () => {
+  it("reports an invalid saved modules value as malformed config", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");
     mkdirSync(configDir, { recursive: true });
     writeFileSync(join(configDir, "config.json"), '{"modules":null}');
     try {
-      const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
+      const result = spawnSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
         encoding: "utf8",
         env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
       });
-      expect(output).toContain("modules: none configured");
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("malformed config");
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
