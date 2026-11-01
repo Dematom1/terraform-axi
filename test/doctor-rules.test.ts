@@ -29,7 +29,13 @@ describe("doctor credential rules", () => {
   });
 
   it("recognizes configured regions and only actual B2 hostnames", () => {
-    const backend = { type: "s3", endpointHost: "not-backblazeb2.com.attacker.example", region: "us-west-2", flags: {}, inlineCredentials: false };
+    const backend = {
+      type: "s3",
+      endpointHost: "not-backblazeb2.com.attacker.example",
+      region: "us-west-2",
+      flags: {},
+      inlineCredentials: false,
+    };
     const result = rules({}, backend);
     expect(result.findings.map(({ id }) => id)).not.toContain("region-missing");
     expect(result.findings.map(({ id }) => id)).not.toContain("b2-required-checksum");
