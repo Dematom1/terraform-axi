@@ -7,7 +7,7 @@ import {
 } from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
 import { homedir } from "node:os";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION } from "./version.js";
@@ -40,7 +40,20 @@ function readClaudeSettings(): Record<string, unknown> {
 }
 function writeClaudeSettings(settings: Record<string, unknown>): void {
   mkdirSync(dirname(claudeSettingsPath), { recursive: true, mode: 0o700 });
-  writeFileSync(claudeSettingsPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+  let mode = 0o600;
+  try {
+    mode = statSync(claudeSettingsPath).mode & 0o777;
+  } catch (error) {
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") throw error;
+  }
+  const temp = `${claudeSettingsPath}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temp, `${JSON.stringify(settings, null, 2)}\n`, { mode });
+    chmodSync(temp, mode);
+    renameSync(temp, claudeSettingsPath);
+  } finally {
+    try { unlinkSync(temp); } catch { /* Renamed or absent. */ }
+  }
 }
 function sessionEndStatus(settings: Record<string, unknown>): "installed" | "missing" | "stale" {
   const hooks = settings.hooks;

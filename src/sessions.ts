@@ -1,4 +1,4 @@
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -64,8 +64,15 @@ export function recordSession(input: unknown, path = dataPath()): void {
       try {
         const observed = statSync(lock);
         if (Date.now() - observed.mtimeMs > 30_000) {
-          const current = statSync(lock);
-          if (current.dev === observed.dev && current.ino === observed.ino) unlinkSync(lock);
+          const stale = `${lock}.${process.pid}.${Math.random().toString(36).slice(2)}`;
+          renameSync(lock, stale);
+          try {
+            const moved = statSync(stale);
+            if (moved.dev === observed.dev && moved.ino === observed.ino) continue;
+            try { linkSync(stale, lock); } catch { /* Another writer acquired the lock. */ }
+          } finally {
+            unlinkSync(stale);
+          }
         }
       } catch { /* Lock disappeared. */ }
       if (existsSync(lock)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
@@ -77,9 +84,12 @@ export function recordSession(input: unknown, path = dataPath()): void {
     let store: Store = { sessions: [] };
     try {
       const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-      if (parsed && typeof parsed === "object" && Array.isArray((parsed as Record<string, unknown>).sessions))
-        store = parsed as Store;
-    } catch { /* Start fresh if the store is absent or malformed. */ }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray((parsed as Record<string, unknown>).sessions))
+        throw new Error("malformed session store");
+      store = parsed as Store;
+    } catch (error) {
+      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") throw error;
+    }
     store.sessions = [...store.sessions, session].slice(-50);
     const temp = `${path}.${process.pid}.tmp`;
     writeFileSync(temp, `${JSON.stringify(store)}\n`, { mode: 0o600 });
