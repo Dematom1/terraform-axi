@@ -1,6 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decode } from "@toon-format/toon";
@@ -66,73 +65,70 @@ describe("real Terraform and OpenTofu", () => {
   });
 
   it.skipIf(binaries.length === 0)(
-    "reports a deleted local_file as drift without touching state",
+    "lists and redacts state without modifying files",
     () => {
-      for (const binary of binaries) {
-        const home = mkdtempSync(join(tmpdir(), "tfaxi-drift-real-"));
-        const env = { PATH: process.env.PATH ?? "", HOME: home, XDG_CONFIG_HOME: join(home, ".config") };
-        const directory = realModule(
-          {
-            "main.tf": `terraform {
-  backend "local" {}
-  required_providers {
-    local = {
-      source  = "hashicorp/local"
-      version = "2.5.2"
-    }
-  }
-}
-resource "local_file" "f" {
-  filename = "\${path.module}/f.txt"
-  content  = "v1"
-}
-`,
-          },
-          binary,
-          false,
-        );
-        try {
-          // Fixture setup only: give the throwaway module state. The product never applies.
-          execFileSync(binary, [`-chdir=${directory}`, "apply", "-auto-approve", "-input=false"], {
-            stdio: "ignore",
+      const home = mkdtempSync(join(tmpdir(), "tfaxi-state-home-"));
+      const temporary = join(home, "tmp");
+      const module = join(home, "module");
+      const configDir = join(home, ".config");
+      const env = {
+        PATH: process.env.PATH ?? "",
+        HOME: home,
+        XDG_CONFIG_HOME: configDir,
+        TMPDIR: temporary,
+        TF_IN_AUTOMATION: "1",
+        TF_INPUT: "0",
+        CHECKPOINT_DISABLE: "1",
+      };
+      mkdirSync(temporary);
+      mkdirSync(module);
+      const largeValue = "x".repeat(5 * 1024 * 1024);
+      writeFileSync(
+        join(module, "main.tf"),
+        [
+          'terraform {\n  backend "local" {}\n}',
+          'resource "terraform_data" "secret" {',
+          '  input = sensitive("hunter2")',
+          `  triggers_replace = [${JSON.stringify(largeValue)}]`,
+          "}",
+          'resource "terraform_data" "one" {}',
+          'resource "terraform_data" "two" {}',
+          "",
+        ].join("\n"),
+        { mode: 0o600 },
+      );
+      const cli = (args: string[]) =>
+        spawnSync(process.execPath, [join(root, "dist/bin/terraform-axi.js"), ...args], { encoding: "utf8", env });
+      try {
+        for (const binary of binaries) {
+          execFileSync(binary, [`-chdir=${module}`, "init", "-input=false"], { env, timeout: 120_000 });
+          execFileSync(binary, [`-chdir=${module}`, "apply", "-auto-approve", "-input=false"], {
+            env,
             timeout: 120_000,
-            env: { ...env, TF_IN_AUTOMATION: "1", CHECKPOINT_DISABLE: "1" },
+            stdio: "ignore",
           });
-          const drift = () =>
-            spawnSync(
-              process.execPath,
-              [join(root, "dist/bin/terraform-axi.js"), "drift", directory, "--binary", binary],
-              {
-                encoding: "utf8",
-                env,
-              },
-            );
-          const clean = drift();
-          expect(clean.status, clean.stdout).toBe(0);
-          expect(decode(clean.stdout)).toMatchObject({ status: "no drift", drifted: 0 });
-
-          rmSync(join(directory, "f.txt"));
-          const sha = () =>
-            createHash("sha256")
-              .update(readFileSync(join(directory, "terraform.tfstate")))
-              .digest("hex");
-          const before = { sha: sha(), files: readdirSync(directory).sort() };
-          const drifted = drift();
-          expect(drifted.status, drifted.stdout).toBe(0);
-          expect(decode(drifted.stdout)).toMatchObject({
-            version: expect.stringMatching(binary === "tofu" ? /^tofu / : /^terraform /) as string,
-            status: "drift detected",
-            drifted: 1,
-            drift: [{ action: "delete", address: "local_file.f" }],
-            human_only: `${binary} -chdir=${directory} apply -refresh-only`,
-          });
-          expect({ sha: sha(), files: readdirSync(directory).sort() }).toEqual(before);
-        } finally {
-          rmSync(directory, { recursive: true, force: true });
-          rmSync(home, { recursive: true, force: true });
+          const statePath = join(module, "terraform.tfstate");
+          const beforeState = readFileSync(statePath);
+          const beforeModuleFiles = readdirSync(module).sort();
+          const beforeTempFiles = readdirSync(temporary).sort();
+          expect(cli(["setup", "--binary", binary]).status).toBe(0);
+          const list = cli(["state", "list", module]);
+          expect(list.status).toBe(0);
+          expect(list.stdout).toContain("total: 3");
+          const resource = cli(["state", "resource", module, "terraform_data.secret"]);
+          expect(resource.status).toBe(0);
+          expect(resource.stdout).toContain('input: "[redacted]"');
+          expect(resource.stdout).toContain('output: "[redacted]"');
+          expect(resource.stdout).not.toContain(largeValue);
+          expect(`${resource.stdout}${resource.stderr}`).not.toContain("hunter2");
+          expect(readFileSync(statePath)).toEqual(beforeState);
+          expect(readdirSync(module).sort()).toEqual(beforeModuleFiles);
+          expect(readdirSync(temporary).sort()).toEqual(beforeTempFiles);
         }
+      } finally {
+        rmSync(home, { recursive: true, force: true });
       }
     },
-    600_000,
+    120_000,
   );
 });

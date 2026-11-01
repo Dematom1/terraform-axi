@@ -7,15 +7,16 @@ import type { Config } from "./config.js";
 
 const execute = promisify(execFile);
 const versionArgs = ["version", "-json"];
-// TF_CLI_ARGS* would let the environment append arbitrary flags, such as `-out=` writing a plan with secrets.
+// TF_CLI_ARGS* could append arbitrary flags, such as -out=, writing a plan with secrets.
 const runEnv = () => ({
   ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("TF_CLI_ARGS"))),
   TF_IN_AUTOMATION: "1",
   TF_INPUT: "0",
   CHECKPOINT_DISABLE: "1",
 });
-function classify(error: unknown): "not found" | "not executable" | "timeout" | "failed" {
+function classify(error: unknown): "not found" | "not executable" | "timeout" | "output limit exceeded" | "failed" {
   const record = error && typeof error === "object" ? error : {};
+  if ("code" in record && record.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return "output limit exceeded";
   if ("code" in record && record.code === "ENOENT") return "not found";
   if ("code" in record && record.code === "EACCES") return "not executable";
   if (
@@ -47,7 +48,7 @@ export function assertAllowed(args: string[]): void {
     args.some((arg) => denied.has(arg) || arg === "-out" || arg.startsWith("-out=")) ||
     (args[0] === "state" && args.some((arg) => deniedState.has(arg))) ||
     (args[0] === "workspace" && args.some((arg) => deniedWorkspace.has(arg))) ||
-    (args[0] === "show" && args.length > 1)
+    (args[0] === "show" && !(args.length === 2 && args[1] === "-json"))
   )
     throw new CliError("unsupported Terraform argument");
 }
@@ -103,6 +104,12 @@ export type RunOptions = {
 };
 export type RunResult = { stdout: string; stderr: string; exitCode: number; fallbackReason?: string };
 
+const operations = { state_list: ["state", "list"], show_state: ["show", "-json"] } as const;
+export type Operation = keyof typeof operations;
+export function runOperation(config: Config, module: string, operation: Operation, timeout = 600_000) {
+  return run(config, module, timeout, { args: [...operations[operation]], maxBuffer: 64 * 1024 * 1024 });
+}
+
 export async function run(
   config: Config,
   module: string,
@@ -136,7 +143,6 @@ export async function run(
     maxBuffer: options.maxBuffer ?? 4 * 1024 * 1024,
     env: runEnv(),
   };
-  // An accepted exit code is a result: return its output instead of failing.
   const accepted = (error: unknown): RunResult | undefined => {
     const record = error && typeof error === "object" ? error : {};
     if (!("code" in record) || typeof record.code !== "number" || !options.exitCodes?.includes(record.code))
@@ -155,9 +161,13 @@ export async function run(
     const result = accepted(error);
     if (result) return { ...result, ...(fallbackReason ? { fallbackReason } : {}) };
     let failure = error;
-    // Only the version probe retries with OpenTofu: a failed plan rerun under another binary would hide
-    // Terraform's own failure behind a different tool's result.
-    if (!options.args && !config.wrapper && config.binary === "auto" && file === "terraform") {
+    if (
+      !options.args &&
+      !config.wrapper &&
+      config.binary === "auto" &&
+      file === "terraform" &&
+      classify(error) !== "output limit exceeded"
+    ) {
       try {
         assertAllowed(args);
         const result = await execute("tofu", argv, execOptions);
@@ -171,14 +181,19 @@ export async function run(
     const record = failure && typeof failure === "object" ? failure : {};
     const category = classify(failure);
     const stdout = "stdout" in record && typeof record.stdout === "string" ? record.stdout : "";
-    const diagnostics = stdout.split("\n").flatMap((line) => {
-      try {
-        const event: unknown = JSON.parse(line);
-        return event && typeof event === "object" && "type" in event && event.type === "diagnostic" ? [event] : [];
-      } catch {
-        return [];
-      }
-    });
+    const diagnostics =
+      options.args?.[0] === "state" || options.args?.[0] === "show"
+        ? []
+        : stdout.split("\n").flatMap((line) => {
+            try {
+              const event: unknown = JSON.parse(line);
+              return event && typeof event === "object" && "type" in event && event.type === "diagnostic"
+                ? [event]
+                : [];
+            } catch {
+              return [];
+            }
+          });
     throw new CliError(category, 1, diagnostics);
   }
 }
