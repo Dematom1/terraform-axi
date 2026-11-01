@@ -98,8 +98,9 @@ async function home(): Promise<string> {
     try {
       const { execFileSync } = await import("node:child_process");
       const args = ["version", "-json"];
+      const [executable, ...wrapperArgs] = c.wrapper?.trim().split(/\s+/) ?? [];
       const rawVersion = c.wrapper
-        ? execFileSync("sh", ["-c", `${c.wrapper} ${args.join(" ")}`], { encoding: "utf8", timeout: 2000 })
+        ? execFileSync(executable ?? "", [...wrapperArgs, ...args], { encoding: "utf8", timeout: 2000 })
         : execFileSync(binary, args, { encoding: "utf8", timeout: 2000 });
       const version: unknown = JSON.parse(rawVersion);
       versions[binary] =
