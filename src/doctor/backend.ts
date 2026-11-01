@@ -3,21 +3,35 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { Backend } from "./rules.js";
 
-function withoutComments(source: string): string {
-  return source.replace(/"(?:\\.|[^"\\])*"|#.*|\/\/[^:\n].*|\/\*[\s\S]*?\*\//g, (match) =>
-    match.startsWith('"') ? match : " ".repeat(match.length),
-  );
+function maskSyntax(source: string): string {
+  const chars = [...source];
+  let quoted = false;
+  for (let i = 0; i < chars.length; i++) {
+    if (quoted) {
+      chars[i] = " ";
+      if (source[i] === '"' && source[i - 1] !== "\\") quoted = false;
+    } else if (source[i] === '"') {
+      quoted = true;
+      chars[i] = " ";
+    } else if (source[i] === "#" || source.startsWith("//", i) || source.startsWith("/*", i)) {
+      const newline = source.indexOf("\n", i);
+      const end = source[i] === "#" || source.startsWith("//", i)
+        ? (newline < 0 ? source.length : newline)
+        : (source.indexOf("*/", i + 2) < 0 ? source.length : source.indexOf("*/", i + 2) + 2);
+      for (; i < end; i++) if (source[i] !== "\n") chars[i] = " ";
+      i--;
+    }
+  }
+  return chars.join("");
 }
 
-function blockBody(source: string, start: number): string | undefined {
+function blockRange(source: string, start: number): [number, number] | undefined {
   const open = source.indexOf("{", start);
   if (open < 0) return undefined;
   let depth = 1;
-  let quoted = false;
   for (let i = open + 1; i < source.length; i++) {
-    if (source[i] === '"' && source[i - 1] !== "\\") quoted = !quoted;
-    else if (!quoted && source[i] === "{") depth++;
-    else if (!quoted && source[i] === "}" && --depth === 0) return source.slice(open + 1, i);
+    if (source[i] === "{") depth++;
+    else if (source[i] === "}" && --depth === 0) return [open + 1, i];
   }
   return undefined;
 }
@@ -33,39 +47,35 @@ export function inspectBackend(module: string): Backend | undefined {
   }
   const protectedPath = (path: string) => path === unsafe || path.startsWith(`${unsafe}/`);
   if (protectedPath(directory)) throw new Error("refusing to inspect the protected infrastructure directory");
-  const sources = readdirSync(directory)
+  const source = readdirSync(directory)
     .filter((file) => file.endsWith(".tf"))
     .map((file) => {
       const path = realpathSync(resolve(directory, file));
       if (protectedPath(path)) throw new Error("refusing to inspect the protected infrastructure directory");
       return readFileSync(path, "utf8");
-    });
-  const source = withoutComments(sources.join("\n"));
-  const terraformBlocks = /\bterraform\s*\{/g;
-  let block: RegExpMatchArray | null = null;
+    })
+    .join("\n");
+  const structure = maskSyntax(source);
+  let backendType: string | undefined;
   let body: string | undefined;
-  for (const match of source.matchAll(terraformBlocks)) {
-    const terraform = blockBody(source, match.index!);
-    if (!terraform) continue;
-    const backendStart = terraform.search(/\bbackend\s+"[\w-]+"\s*\{/);
-    if (backendStart < 0) continue;
-    const backend = terraform.slice(backendStart);
-    block = backend.match(/^\s*backend\s+"([\w-]+)"\s*\{/);
-    body = block ? blockBody(backend, 0) : undefined;
-    if (block && body) break;
+  for (const terraformMatch of structure.matchAll(/\bterraform\s*\{/g)) {
+    const terraformRange = blockRange(structure, terraformMatch.index!);
+    if (!terraformRange) continue;
+    const terraform = structure.slice(...terraformRange);
+    const backendMatch = /\bbackend\b/.exec(terraform);
+    if (!backendMatch) continue;
+    const backendRange = blockRange(terraform, backendMatch.index);
+    if (!backendRange) continue;
+    const header = source.slice(terraformRange[0] + backendMatch.index, terraformRange[0] + backendRange[0] - 1);
+    backendType = /backend\s+"([\w-]+)"/.exec(header)?.[1];
+    body = source.slice(terraformRange[0] + backendRange[0] + backendMatch.index, terraformRange[0] + backendRange[1] + backendMatch.index);
+    if (body && backendType) break;
   }
-  if (!block || !body) return undefined;
-  const value = (name: string) => body.match(new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`))?.[1];
+  if (!body || !backendType) return undefined;
+  const value = (name: string) => body.match(new RegExp(`\\b${name}\\s*=\\s*"((?:\\\\.|[^"\\\\])*)"`))?.[1];
   const flags: Backend["flags"] = {};
-  for (const name of [
-    "skip_credentials_validation",
-    "skip_region_validation",
-    "skip_requesting_account_id",
-    "skip_metadata_api_check",
-    "skip_s3_checksum",
-    "use_path_style",
-  ] as const)
-    flags[name] = new RegExp(`\\b${name}\\s*=\\s*true\\b`).test(body);
+  for (const name of ["skip_credentials_validation", "skip_region_validation", "skip_requesting_account_id", "skip_metadata_api_check", "skip_s3_checksum", "use_path_style"] as const)
+    flags[name] = new RegExp(`\\b${name}\\s*=\\s*true\\b`).test(maskSyntax(body));
   const endpoint = value("endpoint");
   let endpointHost: string | undefined;
   try {
@@ -75,10 +85,10 @@ export function inspectBackend(module: string): Backend | undefined {
   }
   const region = value("region");
   return {
-    type: block[1]!,
+    type: backendType,
     ...(endpointHost ? { endpointHost } : {}),
     ...(region ? { region } : {}),
     flags,
-    inlineCredentials: /\b(?:access_key|secret_key|token|password|client_secret)\s*=/.test(body),
+    inlineCredentials: /\b(?:access_key|secret_key|token|password|client_secret)\s*=/.test(maskSyntax(body)),
   };
 }

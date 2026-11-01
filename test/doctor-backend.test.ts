@@ -38,6 +38,16 @@ describe("static backend inspection", () => {
     expect(inspectBackend(directory)).toBeUndefined();
   });
 
+  it("ignores terraform and backend syntax inside quoted strings", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(
+      join(directory, "main.tf"),
+      'resource "terraform_data" "x" { input = "terraform { backend \\\"s3\\\" { region = \\\"x\\\" } }" }',
+    );
+    expect(inspectBackend(directory)).toBeUndefined();
+  });
+
   it("finds a backend in a later terraform block across module files", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
