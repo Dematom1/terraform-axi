@@ -2,6 +2,7 @@ export class CliError extends Error {
   constructor(
     message: string,
     readonly exitCode = 1,
+    readonly diagnostics: unknown[] = [],
   ) {
     super(message);
     this.name = "CliError";

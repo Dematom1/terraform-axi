@@ -116,7 +116,19 @@ export async function run(
       env: { ...process.env, TF_IN_AUTOMATION: "1", TF_INPUT: "0", CHECKPOINT_DISABLE: "1" },
     });
   } catch (error) {
-    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "failed";
+    const record = error && typeof error === "object" ? error : {};
+    const code = "code" in record ? String(record.code) : "failed";
+    const stdout = "stdout" in record && typeof record.stdout === "string" ? record.stdout : "";
+    const stderr = "stderr" in record && typeof record.stderr === "string" ? record.stderr : "";
+    if (code === "2" && (operation === "plan" || operation === "plan_refresh_only")) return { stdout, stderr };
+    const diagnostics = stdout.split("\n").flatMap((line) => {
+      try {
+        const event: unknown = JSON.parse(line);
+        return event && typeof event === "object" && "type" in event && event.type === "diagnostic" ? [event] : [];
+      } catch {
+        return [];
+      }
+    });
     throw new CliError(
       code === "ENOENT"
         ? "not found"
@@ -125,6 +137,8 @@ export async function run(
           : code === "ETIMEDOUT"
             ? "timeout"
             : "failed",
+      1,
+      diagnostics,
     );
   }
 }
