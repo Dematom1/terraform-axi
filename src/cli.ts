@@ -100,6 +100,8 @@ async function home(): Promise<string> {
     versions.wrapper = "wrapper: not probed (no module configured)";
   }
   const binaries = c.wrapper ? [] : c.binary === "auto" ? ["terraform", "tofu"] : [c.binary];
+  let terraformFailed = false;
+  let tofuAvailable = false;
   for (const binary of binaries) {
     try {
       const result = await run({ ...c, binary: binary as Config["binary"] }, "", 2_000);
@@ -110,8 +112,18 @@ async function home(): Promise<string> {
           : version && typeof version === "object" && "tofu_version" in version
             ? String(version.tofu_version)
             : "version available";
+      if (binary === "tofu") tofuAvailable = true;
     } catch (error) {
       versions[binary] = error instanceof Error ? error.message : "probe failed";
+      if (binary === "terraform") terraformFailed = true;
+    }
+  }
+  if (c.binary === "auto" && !c.wrapper && terraformFailed && tofuAvailable) {
+    try {
+      const { fallbackReason } = await run(c, "", 2_000);
+      if (fallbackReason) versions.tofu = `${versions.tofu ?? "version available"} (${fallbackReason})`;
+    } catch {
+      versions.tofu = `${versions.tofu} (fallback probe failed)`;
     }
   }
   if (c.wrapper && c.modules.length > 0) {

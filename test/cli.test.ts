@@ -183,6 +183,25 @@ describe("terraform-axi scaffold", () => {
     }
   });
 
+  it("shows why auto mode falls back to OpenTofu", () => {
+    const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
+    writeFileSync(join(home, "terraform"), `#!/bin/sh
+exit 1
+`, { mode: 0o700 });
+    writeFileSync(join(home, "tofu"), `#!/bin/sh
+printf '{"tofu_version":"1.2.3"}\\n'
+`, { mode: 0o700 });
+    try {
+      const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi.js")], {
+        encoding: "utf8",
+        env: { PATH: home, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
+      });
+      expect(output).toContain("1.2.3 (Terraform probe failed: failed)");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("does not probe a configured wrapper without a module placeholder", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");
