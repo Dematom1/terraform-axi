@@ -57,14 +57,27 @@ describe("terraform-axi scaffold", () => {
         const steps = workflow.jobs.check.steps;
         const release = steps.find((step) => step.id === "release");
         const gate = steps.find((step) => step.if === "steps.release.outputs.bot_only != 'true'");
-        process.stdout.write(JSON.stringify({ releaseRun: release.run, gateIf: gate.if, trustedCheckout: steps.some((step) => step.with?.path === "trusted") }));
+        process.stdout.write(JSON.stringify({
+          releaseEnvironment: release.env,
+          gateIf: gate.if,
+          trustedCheckout: steps.some((step) => step.with?.path === "trusted"),
+        }));
       `;
-      const contract: { releaseRun: string; gateIf: string; trustedCheckout: boolean } = JSON.parse(
+      const contract: {
+        releaseEnvironment: Record<string, string>;
+        gateIf: string;
+        trustedCheckout: boolean;
+      } = JSON.parse(
         execFileSync(process.execPath, ["-e", parseWorkflow, workflowPath], { cwd: root, encoding: "utf8" }),
       );
       expect(contract.gateIf).toBe("steps.release.outputs.bot_only != 'true'");
       expect(contract.trustedCheckout).toBe(true);
-      expect(contract.releaseRun).toContain(".commit.verification.verified");
+      expect(contract.releaseEnvironment).toMatchObject({
+        REPOSITORY: "${{ github.repository }}",
+        HEAD_REPOSITORY: "${{ github.event.pull_request.head.repo.full_name }}",
+        HEAD_REF: "${{ github.event.pull_request.head.ref }}",
+        RELEASE_APP_BOT_LOGIN: "${{ vars.RELEASE_APP_BOT_LOGIN }}",
+      });
 
       const helper = join(root, "scripts/release-bot-only.mjs");
       const isBotOnly = (commits: string, overrides: Record<string, string> = {}) =>
