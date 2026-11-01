@@ -1,6 +1,7 @@
 export type Backend = {
   type: string;
   endpointHost?: string;
+  region?: string;
   flags: {
     skip_credentials_validation?: boolean;
     skip_region_validation?: boolean;
@@ -76,7 +77,9 @@ export function rules(
   const findings: Finding[] = [];
   const present = (name: string) => status(env[name]) === "set";
   if (backend.type === "s3") {
-    const b2 = backend.endpointHost?.toLowerCase().includes("backblazeb2.com") ?? false;
+    const host = backend.endpointHost?.toLowerCase();
+    const b2 = host === "backblazeb2.com" || host?.endsWith(".backblazeb2.com") === true;
+    const awsKeyPair = present("AWS_ACCESS_KEY_ID") && present("AWS_SECRET_ACCESS_KEY");
     if (backend.inlineCredentials)
       findings.push({
         id: "inline-backend-credentials",
@@ -85,7 +88,7 @@ export function rules(
           "Backend credentials are set in configuration (value hidden); they take precedence over environment credentials.",
         next: "Move credentials to the environment or a wrapper.",
       });
-    if (b2 && (present("B2_APPLICATION_KEY_ID") || present("B2_APPLICATION_KEY")) && !present("AWS_ACCESS_KEY_ID"))
+    if (b2 && (present("B2_APPLICATION_KEY_ID") || present("B2_APPLICATION_KEY")) && !awsKeyPair)
       findings.push({
         id: "b2-keys-invisible",
         severity: "fail",
@@ -93,7 +96,7 @@ export function rules(
           "The s3 backend ignores B2_APPLICATION_KEY_ID/B2_APPLICATION_KEY. Export AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY with the B2 application key ID and key (or map them in your wrapper).",
         next: "Map the B2 application key ID and key to AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.",
       });
-    if (b2 && (present("B2_APPLICATION_KEY_ID") || present("B2_APPLICATION_KEY")) && present("AWS_ACCESS_KEY_ID"))
+    if (b2 && (present("B2_APPLICATION_KEY_ID") || present("B2_APPLICATION_KEY")) && awsKeyPair)
       findings.push({
         id: "aws-overrides-b2",
         severity: "warn",
@@ -116,7 +119,7 @@ export function rules(
         message: "Static AWS environment keys take precedence over AWS_PROFILE.",
         next: "Unset the static AWS keys to use the profile.",
       });
-    if (!present("AWS_REGION") && !present("AWS_DEFAULT_REGION"))
+    if (!backend.region && !present("AWS_REGION") && !present("AWS_DEFAULT_REGION"))
       findings.push({
         id: "region-missing",
         severity: "fail",
