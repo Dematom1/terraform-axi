@@ -102,7 +102,7 @@ async function home(): Promise<string> {
   const binaries = c.wrapper ? [] : c.binary === "auto" ? ["terraform", "tofu"] : [c.binary];
   for (const binary of binaries) {
     try {
-      const result = await run({ ...c, binary: binary as Config["binary"] }, "", "version", 2_000);
+      const result = await run({ ...c, binary: binary as Config["binary"] }, "", 2_000);
       const version: unknown = JSON.parse(result.stdout);
       versions[binary] =
         version && typeof version === "object" && "terraform_version" in version
@@ -117,7 +117,7 @@ async function home(): Promise<string> {
   if (c.wrapper && c.modules.length > 0) {
     try {
       validateWrapper(c.wrapper);
-      const result = await run(c, c.modules[0]!, "version", 2_000);
+      const result = await run(c, c.modules[0]!, 2_000);
       const version: unknown = JSON.parse(result.stdout);
       const flavor =
         version && typeof version === "object" && "terraform_version" in version

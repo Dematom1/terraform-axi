@@ -40,7 +40,7 @@ describe("runner seam", () => {
     );
     vi.stubEnv("AWS_SECRET_ACCESS_KEY", "SENTINEL_TEST_ONLY");
     try {
-      const result = await run(config(`${wrapper} {module}`), "infra/a b", "version");
+      const result = await run(config(`${wrapper} {module}`), "infra/a b");
       expect(result.stdout).toContain("1.2.3");
       expect(readFileSync(log, "utf8").split("\n").slice(0, 3)).toEqual(["infra/a b", "version", "-json"]);
       expect(readFileSync(envLog, "utf8")).toBe("SENTINEL_TEST_ONLY");
@@ -56,13 +56,13 @@ describe("runner seam", () => {
     writeFileSync(tofu, "#!/bin/sh\nprintf 'tofu-selected\\n'\n", { mode: 0o700 });
     chmodSync(tofu, 0o700);
     vi.stubEnv("PATH", dir);
-    await expect(run({ binary: "auto", modules: [] }, "", "workspace_show")).resolves.toMatchObject({
+    await expect(run({ binary: "auto", modules: [] }, "")).resolves.toMatchObject({
       stdout: "tofu-selected\n",
     });
     const terraform = join(dir, "terraform");
     writeFileSync(terraform, "#!/bin/sh\nprintf 'terraform-selected\\n'\n", { mode: 0o700 });
     chmodSync(terraform, 0o700);
-    await expect(run({ binary: "auto", modules: [] }, "", "workspace_show")).resolves.toMatchObject({
+    await expect(run({ binary: "auto", modules: [] }, "")).resolves.toMatchObject({
       stdout: "terraform-selected\n",
     });
   });
@@ -72,37 +72,33 @@ describe("runner seam", () => {
     chmodSync(join(dir, "terraform"), 0o700);
     chmodSync(join(dir, "tofu"), 0o700);
     vi.stubEnv("PATH", dir);
-    await expect(run({ binary: "auto", modules: [] }, "", "workspace_show")).resolves.toMatchObject({
+    await expect(run({ binary: "auto", modules: [] }, "")).resolves.toMatchObject({
       stdout: "tofu-selected\n",
+      fallbackReason: "Terraform probe failed: failed",
     });
   });
-  it("accepts plan exit 2 and retains parsed diagnostics on failures", async () => {
-    const changed = executable('printf \'{"type":"change_summary"}\\n\'; exit 2');
-    await expect(run(config(`${changed} {module}`), "mod", "plan")).resolves.toMatchObject({
-      stdout: expect.stringContaining("change_summary"),
-      exitCode: 2,
-    });
+  it("retains parsed diagnostics on version failures", async () => {
     const failed = executable('printf \'{"type":"diagnostic","diagnostic":{"summary":"bad"}}\\n\'; exit 1');
-    await expect(run(config(`${failed} {module}`), "mod", "plan")).rejects.toMatchObject({
+    await expect(run(config(`${failed} {module}`), "mod")).rejects.toMatchObject({
       message: "failed",
       diagnostics: [{ type: "diagnostic" }],
     });
   });
   it("maps missing executable and timeout", async () => {
-    await expect(run(config(`${join(dir, "missing")} {module}`), "mod", "version")).rejects.toThrow("not found");
+    await expect(run(config(`${join(dir, "missing")} {module}`), "mod")).rejects.toThrow("not found");
     const slow = executable("sleep 2");
-    await expect(run(config(`${slow} {module}`), "mod", "version", 10)).rejects.toMatchObject({ message: "timeout" });
+    await expect(run(config(`${slow} {module}`), "mod", 10)).rejects.toMatchObject({ message: "timeout" });
   });
   it("maps a non-executable binary", async () => {
     const denied = executable("exit 0");
     chmodSync(denied, 0o000);
-    await expect(run(config(`${denied} {module}`), "mod", "version")).rejects.toMatchObject({
+    await expect(run(config(`${denied} {module}`), "mod")).rejects.toMatchObject({
       message: "not executable",
     });
     chmodSync(denied, 0o700);
   });
   it("maps nonzero exit to failed", async () => {
     const failed = executable("exit 1");
-    await expect(run(config(`${failed} {module}`), "mod", "version")).rejects.toBeInstanceOf(CliError);
+    await expect(run(config(`${failed} {module}`), "mod")).rejects.toBeInstanceOf(CliError);
   });
 });

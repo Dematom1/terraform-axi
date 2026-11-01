@@ -6,16 +6,7 @@ import { CliError } from "./errors.js";
 import type { Config } from "./config.js";
 
 const execute = promisify(execFile);
-const operations = {
-  version: ["version", "-json"],
-  plan: ["plan", "-json", "-input=false", "-lock=false", "-detailed-exitcode"],
-  plan_refresh_only: ["plan", "-json", "-input=false", "-lock=false", "-detailed-exitcode", "-refresh-only"],
-  show_state: ["show", "-json"],
-  state_list: ["state", "list"],
-  workspace_show: ["workspace", "show"],
-  workspace_list: ["workspace", "list"],
-} as const;
-export type Operation = keyof typeof operations;
+const versionArgs = ["version", "-json"];
 const denied = new Set([
   "apply",
   "destroy",
@@ -59,39 +50,49 @@ export function wrapperArgs(wrapper: string, module: string, args: string[]): [s
   words[indexes[0]!] = module;
   return [words[0]!, [...words.slice(1), ...args]];
 }
-async function resolveBinary(binary: Config["binary"]): Promise<"terraform" | "tofu"> {
-  if (binary !== "auto") return binary;
+async function resolveBinary(binary: Config["binary"]): Promise<{ binary: "terraform" | "tofu"; fallbackReason?: string }> {
+  if (binary !== "auto") return { binary };
   let terraformError: unknown;
-  for (const candidate of ["terraform", "tofu"] as const) {
-    try {
-      await execute(candidate, ["version", "-json"], { timeout: 2_000, env: process.env });
-      return candidate;
-    } catch (error) {
-      if (candidate === "terraform") terraformError = error;
-      else {
-        const fallbackMissing = error && typeof error === "object" && "code" in error && error.code === "ENOENT";
-        const failure = fallbackMissing && terraformError ? terraformError : error;
-        const code = failure && typeof failure === "object" && "code" in failure ? failure.code : "failed";
-        throw new CliError(code === "ENOENT" ? "not found" : code === "EACCES" ? "not executable" : code === "ETIMEDOUT" ? "timeout" : "failed");
-      }
-    }
+  try {
+    await execute("terraform", versionArgs, { timeout: 2_000, env: process.env });
+    return { binary: "terraform" };
+  } catch (error) {
+    terraformError = error;
   }
-  throw new CliError("not found");
+  try {
+    await execute("tofu", versionArgs, { timeout: 2_000, env: process.env });
+    const code = terraformError && typeof terraformError === "object" && "code" in terraformError
+      ? terraformError.code
+      : "failed";
+    return {
+      binary: "tofu",
+      fallbackReason: `Terraform probe failed: ${code === "ENOENT" ? "not found" : code === "EACCES" ? "not executable" : code === "ETIMEDOUT" ? "timeout" : "failed"}`,
+    };
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : "failed";
+    const fallbackMissing = code === "ENOENT";
+    const terraformCode = terraformError && typeof terraformError === "object" && "code" in terraformError
+      ? terraformError.code
+      : "failed";
+    const failure = fallbackMissing && terraformCode !== "ENOENT" ? terraformCode : code;
+    throw new CliError(failure === "ENOENT" ? "not found" : failure === "EACCES" ? "not executable" : failure === "ETIMEDOUT" ? "timeout" : "failed");
+  }
 }
 
 export async function run(
   config: Config,
   module: string,
-  operation: Operation,
   timeout?: number,
-): Promise<{ stdout: string; stderr: string; exitCode: 0 | 2 }> {
-  const args = [...operations[operation]];
-  assertAllowed(args);
+): Promise<{ stdout: string; stderr: string; fallbackReason?: string }> {
+  assertAllowed(versionArgs);
   let file: string;
   let argv: string[];
-  if (config.wrapper) [file, argv] = wrapperArgs(config.wrapper, module, args);
+  let fallbackReason: string | undefined;
+  if (config.wrapper) [file, argv] = wrapperArgs(config.wrapper, module, versionArgs);
   else {
-    file = await resolveBinary(config.binary);
+    const selected = await resolveBinary(config.binary);
+    file = selected.binary;
+    fallbackReason = selected.fallbackReason;
     if (module) {
       const directory = resolve(module);
       try {
@@ -100,17 +101,17 @@ export async function run(
         if (error instanceof CliError) throw error;
         throw new CliError(`module directory not found: ${module}`);
       }
-      argv = [`-chdir=${directory}`, ...args];
-    } else argv = args;
+      argv = [`-chdir=${directory}`, ...versionArgs];
+    } else argv = versionArgs;
   }
   try {
     const result = await execute(file, argv, {
-      timeout: timeout ?? (operation === "version" ? 10_000 : 600_000),
+      timeout: timeout ?? 10_000,
       killSignal: "SIGKILL",
       maxBuffer: 4 * 1024 * 1024,
       env: { ...process.env, TF_IN_AUTOMATION: "1", TF_INPUT: "0", CHECKPOINT_DISABLE: "1" },
     });
-    return { ...result, exitCode: 0 };
+    return { ...result, ...(fallbackReason ? { fallbackReason } : {}) };
   } catch (error) {
     const record = error && typeof error === "object" ? error : {};
     const code = "code" in record ? String(record.code) : "failed";
@@ -118,8 +119,6 @@ export async function run(
       ("killed" in record && record.killed === true) || ("signal" in record && record.signal === "SIGKILL");
     const stdout = "stdout" in record && typeof record.stdout === "string" ? record.stdout : "";
     const stderr = "stderr" in record && typeof record.stderr === "string" ? record.stderr : "";
-    if (code === "2" && (operation === "plan" || operation === "plan_refresh_only"))
-      return { stdout, stderr, exitCode: 2 };
     const diagnostics = stdout.split("\n").flatMap((line) => {
       try {
         const event: unknown = JSON.parse(line);
