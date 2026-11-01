@@ -90,7 +90,7 @@ describe.each([
     ]);
     expect(evaluateExpect(parseExpect("add=0"), events)).toEqual({
       status: "fail",
-      reasons: ["planned counts unavailable: the plan stream has no change_summary"],
+      reasons: ["planned counts unavailable: the plan has no complete change summary"],
     });
   });
 

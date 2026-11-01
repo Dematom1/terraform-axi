@@ -46,7 +46,7 @@ const describe = (row: PlanChange) =>
 export function evaluateExpect(expected: ExpectedCounts, events: PlanEvents): ExpectResult {
   const { summary } = events;
   if (summary === "unavailable")
-    return { status: "fail", reasons: ["planned counts unavailable: the plan stream has no change_summary"] };
+    return { status: "fail", reasons: ["planned counts unavailable: the plan has no complete change summary"] };
   const reasons: string[] = [];
   for (const key of KEYS as ExpectKey[]) {
     const want = expected[key];

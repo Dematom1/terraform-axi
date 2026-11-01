@@ -8,4 +8,5 @@ if (log) appendFileSync(log, `${JSON.stringify({ argv: process.argv.slice(2), en
 const code = Number(process.env.TF_AXI_EXIT_CODE ?? 0);
 const fixture = process.env.TF_AXI_FIXTURE;
 if (fixture) process.stdout.write(readFileSync(resolve(fixture), "utf8"));
+if (process.env.TF_AXI_STDERR) process.stderr.write(process.env.TF_AXI_STDERR);
 process.exit(code);

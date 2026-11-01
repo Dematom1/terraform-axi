@@ -7,7 +7,13 @@ import type { Config } from "./config.js";
 
 const execute = promisify(execFile);
 const versionArgs = ["version", "-json"];
-const runEnv = () => ({ ...process.env, TF_IN_AUTOMATION: "1", TF_INPUT: "0", CHECKPOINT_DISABLE: "1" });
+// TF_CLI_ARGS* would let the environment append arbitrary flags, such as `-out=` writing a plan with secrets.
+const runEnv = () => ({
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("TF_CLI_ARGS"))),
+  TF_IN_AUTOMATION: "1",
+  TF_INPUT: "0",
+  CHECKPOINT_DISABLE: "1",
+});
 function classify(error: unknown): "not found" | "not executable" | "timeout" | "failed" {
   const record = error && typeof error === "object" ? error : {};
   if ("code" in record && record.code === "ENOENT") return "not found";
@@ -88,16 +94,27 @@ async function resolveBinary(
   }
 }
 
+export type RunOptions = {
+  /** Terraform arguments after the executable or wrapper. Defaults to `version -json`. */
+  args?: string[];
+  /** Non-zero exit codes that are results rather than failures, e.g. `-detailed-exitcode`'s 1 and 2. */
+  exitCodes?: number[];
+  maxBuffer?: number;
+};
+export type RunResult = { stdout: string; stderr: string; exitCode: number; fallbackReason?: string };
+
 export async function run(
   config: Config,
   module: string,
   timeout?: number,
-): Promise<{ stdout: string; stderr: string; fallbackReason?: string }> {
-  assertAllowed(versionArgs);
+  options: RunOptions = {},
+): Promise<RunResult> {
+  const args = options.args ?? versionArgs;
+  assertAllowed(args);
   let file: string;
   let argv: string[];
   let fallbackReason: string | undefined;
-  if (config.wrapper) [file, argv] = wrapperArgs(config.wrapper, module, versionArgs);
+  if (config.wrapper) [file, argv] = wrapperArgs(config.wrapper, module, args);
   else {
     const selected = await resolveBinary(config.binary);
     file = selected.binary;
@@ -110,31 +127,44 @@ export async function run(
         if (error instanceof CliError) throw error;
         throw new CliError(`module directory not found: ${module}`);
       }
-      argv = [`-chdir=${directory}`, ...versionArgs];
-    } else argv = versionArgs;
+      argv = [`-chdir=${directory}`, ...args];
+    } else argv = args;
   }
+  const execOptions = {
+    timeout: timeout ?? 10_000,
+    killSignal: "SIGKILL" as const,
+    maxBuffer: options.maxBuffer ?? 4 * 1024 * 1024,
+    env: runEnv(),
+  };
+  // An accepted exit code is a result: return its output instead of failing.
+  const accepted = (error: unknown): RunResult | undefined => {
+    const record = error && typeof error === "object" ? error : {};
+    if (!("code" in record) || typeof record.code !== "number" || !options.exitCodes?.includes(record.code))
+      return undefined;
+    const text = (key: string) =>
+      key in record && typeof (record as Record<string, unknown>)[key] === "string"
+        ? ((record as Record<string, unknown>)[key] as string)
+        : "";
+    return { stdout: text("stdout"), stderr: text("stderr"), exitCode: record.code };
+  };
   try {
-    assertAllowed(versionArgs);
-    const result = await execute(file, argv, {
-      timeout: timeout ?? 10_000,
-      killSignal: "SIGKILL",
-      maxBuffer: 4 * 1024 * 1024,
-      env: runEnv(),
-    });
-    return { ...result, ...(fallbackReason ? { fallbackReason } : {}) };
+    assertAllowed(args);
+    const result = await execute(file, argv, execOptions);
+    return { ...result, exitCode: 0, ...(fallbackReason ? { fallbackReason } : {}) };
   } catch (error) {
+    const result = accepted(error);
+    if (result) return { ...result, ...(fallbackReason ? { fallbackReason } : {}) };
     let failure = error;
-    if (!config.wrapper && config.binary === "auto" && file === "terraform") {
+    // Only the version probe retries with OpenTofu: a failed plan rerun under another binary would hide
+    // Terraform's own failure behind a different tool's result.
+    if (!options.args && !config.wrapper && config.binary === "auto" && file === "terraform") {
       try {
-        assertAllowed(versionArgs);
-        const result = await execute("tofu", argv, {
-          timeout: timeout ?? 10_000,
-          killSignal: "SIGKILL",
-          maxBuffer: 4 * 1024 * 1024,
-          env: runEnv(),
-        });
-        return { ...result, fallbackReason: `Terraform invocation failed: ${classify(error)}` };
+        assertAllowed(args);
+        const result = await execute("tofu", argv, execOptions);
+        return { ...result, exitCode: 0, fallbackReason: `Terraform invocation failed: ${classify(error)}` };
       } catch (tofuError) {
+        const result = accepted(tofuError);
+        if (result) return { ...result, fallbackReason: `Terraform invocation failed: ${classify(error)}` };
         failure = tofuError;
       }
     }

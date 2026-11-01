@@ -13,8 +13,9 @@ import { VERSION } from "./version.js";
 import { parseArgs } from "./args.js";
 import { readConfig, writeConfig, type Config } from "./config.js";
 import { run, validateWrapper } from "./runner.js";
-import { CliError } from "./errors.js";
+import { CliError, ReportError } from "./errors.js";
 import { lastSession, recordInvocation } from "./sessions.js";
+import { PLAN_ARGS, planCommand, usage as planUsage } from "./plan/command.js";
 
 const name = "terraform-axi";
 const configPath = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), name, "config.json");
@@ -38,7 +39,16 @@ const notImplemented = (command: string, args: string[]) => {
   throw new CliError("NOT_IMPLEMENTED: command is not implemented in scaffold");
 };
 const commands: Record<string, AxiCliCommand<undefined>> = {
-  plan: async (args) => notImplemented("plan", args),
+  plan: async (args) => {
+    if (args.length === 1 && args[0] === "--help")
+      return output({
+        usage: planUsage,
+        runs: PLAN_ARGS.join(" "),
+        never: "apply, destroy, -out plan files, state writes",
+        help: ["Run `terraform-axi plan <module> --expect add=0,change=0,destroy=0` to assert a no-op plan"],
+      });
+    return output(await planCommand(args, config()));
+  },
   drift: async (args) => notImplemented("drift", args),
   doctor: async (args) => notImplemented("doctor", args),
   state: async (args) => notImplemented("state", args),
@@ -102,7 +112,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
 };
-const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary (coming soon)\n  drift: detect drift (coming soon)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted (coming soon)\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
+const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: detect drift (coming soon)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted (coming soon)\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};
@@ -180,7 +190,11 @@ export async function main(
     home: async () => home(),
     resolveContext: () => undefined,
     formatError: (error) => ({
-      output: output({ error: error instanceof Error ? error.message : String(error), help: hints }),
+      output: `${
+        error instanceof ReportError
+          ? output(error.report)
+          : output({ error: error instanceof Error ? error.message : String(error), help: hints })
+      }\n`,
       exitCode: error instanceof CliError ? error.exitCode : 1,
     }),
   });

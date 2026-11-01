@@ -15,3 +15,11 @@ export class UsageError extends CliError {
     this.name = "UsageError";
   }
 }
+
+/** A failure whose full report is the output, e.g. a plan with errors or a failed `--expect`. */
+export class ReportError extends CliError {
+  constructor(readonly report: Record<string, unknown>) {
+    super(String(report.status ?? "failed"));
+    this.name = "ReportError";
+  }
+}
