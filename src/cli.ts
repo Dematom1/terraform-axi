@@ -18,7 +18,7 @@ import { lastSession, recordInvocation } from "./sessions.js";
 import { PLAN_ARGS, planCommand, usage as planUsage } from "./plan/command.js";
 import { DRIFT_ARGS, drift, driftUsage } from "./commands/drift.js";
 import { stateCommand } from "./commands/state.js";
-import { inspectBackend } from "./doctor/backend.js";
+import { inspectBackend, probeBackend } from "./doctor/backend.js";
 import { explain } from "./doctor/explain.js";
 import { rules } from "./doctor/rules.js";
 
@@ -66,7 +66,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
   },
   doctor: async (args) => {
     if (args.length === 1 && args[0] === "--help")
-      return output({ usage: "terraform-axi doctor [module] | --explain TEXT|-", help: hints });
+      return output({ usage: "terraform-axi doctor [module] [--offline] | --explain TEXT|-", help: hints });
     if (args[0] === "--explain") {
       if (args.length !== 2) throw new CliError("VALIDATION_ERROR: doctor --explain requires TEXT or -");
       let diagnostic = args[1]!;
@@ -78,15 +78,20 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       const explanation = explain(diagnostic);
       return output({ matched: Boolean(explanation), ...(explanation ?? {}) });
     }
-    if (args.length > 1) throw new CliError("VALIDATION_ERROR: doctor accepts at most one module");
-    const module = args[0];
+    const offline = args.includes("--offline");
+    const positional = args.filter((arg) => arg !== "--offline");
+    if (positional.length > 1) throw new CliError("VALIDATION_ERROR: doctor accepts at most one module");
+    const module = positional[0];
     const backend = module ? inspectBackend(module) : undefined;
     const diagnosis = backend ? rules(process.env, backend) : undefined;
+    const reachability = backend
+      ? offline
+        ? "not probed (offline)"
+        : await probeBackend(backend)
+      : undefined;
     return output({
       module: module ?? "not specified",
-      backend: backend
-        ? { type: backend.type, reachability: "not probed (static-only; no init or state access)" }
-        : "not configured or module not specified",
+      backend: backend ? { type: backend.type, reachability } : "not configured or module not specified",
       credentials: diagnosis?.presence ?? {},
       findings: diagnosis?.findings ?? [],
       ...(module && !backend ? { finding: "No static backend block found." } : {}),
@@ -161,7 +166,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
 };
-const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: resources changed outside Terraform/OpenTofu (refresh-only plan)\n  doctor: static backend and credential diagnostics (no state access)\n  state: list resources or inspect one with secrets redacted\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
+const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: resources changed outside Terraform/OpenTofu (refresh-only plan)\n  doctor: backend, reachability and credential diagnostics (no init or state access)\n  state: list resources or inspect one with secrets redacted\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};

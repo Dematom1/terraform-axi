@@ -1,12 +1,34 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { inspectBackend } from "../src/doctor/backend.js";
+import { inspectBackend, probeBackend, probeEndpoint } from "../src/doctor/backend.js";
 
 const directories: string[] = [];
 afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+describe("backend reachability", () => {
+  it("connects to a listening endpoint and reports a refused connection", async () => {
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("expected TCP listener address");
+    try {
+      await expect(probeEndpoint("127.0.0.1", address.port)).resolves.toBe("reachable");
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+    await expect(probeEndpoint("127.0.0.1", address.port)).resolves.toBe("unreachable (connect)");
+  });
+
+  it("derives the default regional S3 endpoint and skips unknown backends", async () => {
+    await expect(probeBackend({ type: "gcs", flags: {}, inlineCredentials: false })).resolves.toBe(
+      "not probed (no endpoint derivable)",
+    );
+  });
 });
 
 describe("static backend inspection", () => {

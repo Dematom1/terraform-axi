@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import { connect } from "node:net";
 import { realpathSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
@@ -83,6 +85,45 @@ function blockRange(source: string, start: number): [number, number] | undefined
     else if (source[i] === "}" && --depth === 0) return [open + 1, i];
   }
   return undefined;
+}
+
+export function probeEndpoint(host: string, port = 443): Promise<string> {
+  return new Promise((resolve) => {
+    const socket = connect({ host, port });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      resolve("unreachable (timeout)");
+    }, 3_000);
+    socket.once("connect", () => {
+      clearTimeout(timer);
+      socket.destroy();
+      resolve("reachable");
+    });
+    socket.once("error", () => {
+      clearTimeout(timer);
+      resolve("unreachable (connect)");
+    });
+  });
+}
+
+export async function probeBackend(backend: Backend): Promise<string> {
+  const host = backend.endpointHost ?? (backend.type === "s3" && backend.region ? `s3.${backend.region}.amazonaws.com` : undefined);
+  if (!host) return "not probed (no endpoint derivable)";
+  let address: string;
+  let dnsTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    ({ address } = await Promise.race([
+      lookup(host),
+      new Promise<never>((_, reject) => {
+        dnsTimer = setTimeout(() => reject(new Error("DNS timeout")), 3_000);
+      }),
+    ]));
+  } catch (error) {
+    return error instanceof Error && error.message === "DNS timeout" ? "unreachable (timeout)" : "unreachable (dns)";
+  } finally {
+    if (dnsTimer) clearTimeout(dnsTimer);
+  }
+  return probeEndpoint(address);
 }
 
 export function inspectBackend(module: string): Backend | undefined {
