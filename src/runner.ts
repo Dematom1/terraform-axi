@@ -46,7 +46,8 @@ export function validateWrapper(wrapper: string): void {
 }
 
 export function wrapperArgs(wrapper: string, module: string, args: string[]): [string, string[]] {
-  if (/[|;&$`<>\r\n]/.test(wrapper)) throw new CliError("wrapper contains shell metacharacters; use a script");
+  if (/[|;&$`<>(){}*?!\[\]\r\n]/.test(wrapper.replaceAll("{module}", "")))
+    throw new CliError("wrapper contains shell metacharacters; use a script");
   const words =
     wrapper
       .match(/(?:'[^']*'|"[^"]*"|\\.|[^\s])+/g)

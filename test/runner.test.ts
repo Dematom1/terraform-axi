@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { run } from "../src/runner.js";
+import { run, validateWrapper } from "../src/runner.js";
 import { CliError } from "../src/errors.js";
 
 let dir: string;
@@ -22,6 +22,14 @@ function executable(body: string): string {
 const config = (wrapper: string) => ({ binary: "auto" as const, modules: [], wrapper });
 
 describe("runner seam", () => {
+  it("rejects wrapper metacharacters while allowing the exact module placeholder", () => {
+    expect(() => validateWrapper("just tf {module}")).not.toThrow();
+    for (const character of "|;&$`<>(){}*?![]\n") {
+      expect(() => validateWrapper(`just tf {module}${character}`)).toThrow();
+    }
+    expect(() => validateWrapper("just tf {module} {module}")).toThrow();
+    expect(() => validateWrapper("just tf prefix{module}")).toThrow();
+  });
   it("keeps a wrapper module argument intact and passes the environment through", async () => {
     const log = join(dir, "argv.json");
     const envLog = join(dir, "env.txt");
