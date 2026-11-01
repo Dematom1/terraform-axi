@@ -130,12 +130,13 @@ async function home(): Promise<string> {
       const version: unknown = JSON.parse(
         execFileSync(executable, wrapperArgs, { encoding: "utf8", timeout: 2000 }),
       );
-      versions.wrapper =
-        version && typeof version === "object" && "tofu_version" in version
-          ? `OpenTofu ${String(version.tofu_version)}`
-          : version && typeof version === "object" && "terraform_version" in version
-            ? `Terraform/OpenTofu ${String(version.terraform_version)}`
-            : "via wrapper: version available";
+      const value =
+        version && typeof version === "object" && "terraform_version" in version
+          ? String(version.terraform_version)
+          : version && typeof version === "object" && "tofu_version" in version
+            ? String(version.tofu_version)
+            : "version available";
+      versions.wrapper = `${c.binary === "auto" ? "wrapper-selected/unknown" : c.binary} ${value}`;
     } catch {
       versions.wrapper = "via wrapper: version probe failed";
     }

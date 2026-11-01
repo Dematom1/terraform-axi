@@ -11,9 +11,12 @@ describe("terraform-axi scaffold", () => {
   it.each(["no-mistakes-required", "guard-generated-files"])(
     "%s skips only all-bot release commits",
     () => {
-      const script = join(root, "scripts", "release-bot-only.mjs");
       const check = (authors: string[]) =>
-        execFileSync(process.execPath, [script], { encoding: "utf8", input: `${authors.join("\n")}\n` });
+        execFileSync(process.execPath, ["scripts/release-bot-only.mjs"], {
+          cwd: root,
+          encoding: "utf8",
+          input: `${authors.join("\n")}\n`,
+        });
 
       expect(check(["release-please[bot]", "release-please[bot]"])).toBe("true");
       expect(check(["release-please[bot]", "human-user"])).toBe("false");
@@ -68,7 +71,7 @@ describe("terraform-axi scaffold", () => {
         encoding: "utf8",
         env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
       });
-      expect(output).toContain("wrapper: Terraform/OpenTofu 9.9.9");
+      expect(output).toContain("wrapper: wrapper-selected/unknown 9.9.9");
       expect(output).not.toContain("versions.auto");
     } finally {
       rmSync(home, { recursive: true, force: true });
