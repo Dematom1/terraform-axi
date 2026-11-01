@@ -1,6 +1,6 @@
 ---
 name: terraform-axi
-description: Read-only Terraform and OpenTofu plan and state inspection CLI.
+description: Read-only Terraform and OpenTofu CLI scaffold; plan, drift, doctor, and state commands are planned but not implemented.
 ---
 
 # terraform-axi
@@ -20,4 +20,4 @@ Use terraform-axi for read-only infrastructure inspection. Never apply or destro
 | `terraform-axi setup` / `setup status`                           | Configure and inspect binary/wrapper settings                         |
 | `terraform-axi setup hooks` / `setup uninstall`                  | Install or remove terraform-axi-managed user-level SessionStart hooks |
 
-See [VISION.md](VISION.md) for product boundaries and [CONTRIBUTING.md](CONTRIBUTING.md) before contributing.
+See [VISION.md](../../VISION.md) for product boundaries and [CONTRIBUTING.md](https://github.com/Dematom1/terraform-axi/blob/main/CONTRIBUTING.md) before contributing.

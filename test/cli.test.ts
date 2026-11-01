@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -57,47 +57,34 @@ describe("terraform-axi scaffold", () => {
         const steps = workflow.jobs.check.steps;
         const release = steps.find((step) => step.id === "release");
         const gate = steps.find((step) => step.if === "steps.release.outputs.bot_only != 'true'");
-        process.stdout.write(JSON.stringify({ releaseIf: release.if, releaseRun: release.run, gateIf: gate.if }));
+        process.stdout.write(JSON.stringify({ releaseRun: release.run, gateIf: gate.if, trustedCheckout: steps.some((step) => step.with?.path === "trusted") }));
       `;
-      const contract: { releaseIf: string; releaseRun: string; gateIf: string } = JSON.parse(
+      const contract: { releaseRun: string; gateIf: string; trustedCheckout: boolean } = JSON.parse(
         execFileSync(process.execPath, ["-e", parseWorkflow, workflowPath], { cwd: root, encoding: "utf8" }),
       );
-      expect(contract.releaseIf).toBe("github.event.pull_request.user.login == 'release-please[bot]'");
       expect(contract.gateIf).toBe("steps.release.outputs.bot_only != 'true'");
+      expect(contract.trustedCheckout).toBe(true);
+      expect(contract.releaseRun).toContain(".commit.verification.verified");
 
-      const fakeBin = mkdtempSync(join(tmpdir(), "release-check-test-"));
-      const fakeGh = join(fakeBin, "gh");
-      const outputPath = join(fakeBin, "github-output");
-      writeFileSync(fakeGh, "#!/bin/sh\nprintf '%s' \"$GH_FIXTURE\"\n", { mode: 0o700 });
-      const run = contract.releaseRun
-        .replace("gh api", `${JSON.stringify(fakeGh)} api`)
-        .replace(
-          "node scripts/release-bot-only.mjs",
-          `${JSON.stringify(process.execPath)} ${JSON.stringify(join(root, "scripts/release-bot-only.mjs"))}`,
-        );
-      const checkWorkflow = (commits: string) => {
-        writeFileSync(outputPath, "");
-        execFileSync("bash", ["-e", "-c", run], {
-          cwd: root,
+      const helper = join(root, "scripts/release-bot-only.mjs");
+      const isBotOnly = (commits: string, overrides: Record<string, string> = {}) =>
+        execFileSync(process.execPath, [helper], {
+          input: commits,
+          encoding: "utf8",
           env: {
             ...process.env,
-            PATH: `${fakeBin}:${process.env.PATH}`,
-            GH_FIXTURE: commits,
-            GH_TOKEN: "test-token",
-            PR_NUMBER: "1",
+            RELEASE_APP_BOT_LOGIN: "app[bot]",
             REPOSITORY: "example/project",
-            GITHUB_OUTPUT: outputPath,
+            HEAD_REPOSITORY: "example/project",
+            HEAD_REF: "release-please--branches--main",
+            ...overrides,
           },
-        });
-        return readFileSync(outputPath, "utf8").trim();
-      };
-      try {
-        expect(checkWorkflow("release-please[bot]\trelease-please[bot]\n")).toBe("bot_only=true");
-        expect(checkWorkflow("human-user\trelease-please[bot]\n")).toBe("bot_only=false");
-        expect(checkWorkflow("release-please[bot]\thuman-user\n")).toBe("bot_only=false");
-      } finally {
-        rmSync(fakeBin, { recursive: true, force: true });
-      }
+        }) === "true";
+      expect(isBotOnly("app[bot]\tapp[bot]\ttrue\n")).toBe(true);
+      expect(isBotOnly("human\tapp[bot]\ttrue\n")).toBe(false);
+      expect(isBotOnly("app[bot]\tapp[bot]\tfalse\n")).toBe(false);
+      expect(isBotOnly("app[bot]\tapp[bot]\ttrue\n", { HEAD_REPOSITORY: "fork/project" })).toBe(false);
+      expect(isBotOnly("app[bot]\tapp[bot]\ttrue\n", { RELEASE_APP_BOT_LOGIN: "" })).toBe(false);
     },
   );
 
@@ -147,7 +134,7 @@ describe("terraform-axi scaffold", () => {
       });
       expect(output).toContain("wrapper: not probed (no module configured)");
       expect(output).not.toContain("<module>");
-      expect(output).not.toContain("versions.auto");
+      expect(output).not.toMatch(/^\s+(terraform|tofu):/m);
       expect(output).not.toContain("9.9.9");
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -174,7 +161,7 @@ describe("terraform-axi scaffold", () => {
         env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
       });
       expect(output).toContain("wrapper: wrapper-selected/unknown 9.9.9");
-      expect(output).not.toContain("versions.auto");
+      expect(output).not.toMatch(/^\s+(terraform|tofu):/m);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

@@ -3,11 +3,14 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
 
-export function isReleaseBotOnly(commits) {
+export function isReleaseBotOnly(commits, { botLogin, repository, headRepository, headRef }) {
   return (
+    Boolean(botLogin) &&
+    repository === headRepository &&
+    headRef.startsWith("release-please--") &&
     commits.length > 0 &&
     commits.every(
-      (commit) => commit.length === 2 && commit[0] === "release-please[bot]" && commit[1] === "release-please[bot]",
+      ([author, committer, verified]) => author === botLogin && committer === botLogin && verified === "true",
     )
   );
 }
@@ -18,5 +21,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     .split(/\r?\n/)
     .filter(Boolean)
     .map((line) => line.split("\t"));
-  process.stdout.write(String(isReleaseBotOnly(commits)));
+  process.stdout.write(
+    String(
+      isReleaseBotOnly(commits, {
+        botLogin: process.env.RELEASE_APP_BOT_LOGIN,
+        repository: process.env.REPOSITORY,
+        headRepository: process.env.HEAD_REPOSITORY,
+        headRef: process.env.HEAD_REF ?? "",
+      }),
+    ),
+  );
 }

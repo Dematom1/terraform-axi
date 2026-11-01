@@ -9,7 +9,7 @@
 
 Read-only Terraform and OpenTofu inspection for agents. Output is compact [TOON](https://toonformat.dev/) and follows [AXI](https://github.com/kunchenguid/axi) principles. CI tests Linux and macOS; Windows is not currently supported.
 
-**Safety:** terraform-axi never applies or destroys. Secrets are always redacted. It never writes state to disk. This scaffold does not implement `plan`, `plan --expect`, `drift`, `doctor`, or `state`; those commands are planned for follow-up releases.
+**Safety:** terraform-axi never applies or destroys. Secrets in Terraform state output are always redacted; configured wrapper text may be shown as entered. It never writes state to disk. This scaffold does not implement `plan`, `plan --expect`, `drift`, `doctor`, or `state`; those commands are planned for follow-up releases.
 
 ## Install and configure
 
