@@ -58,6 +58,24 @@ const fixture = {
 };
 
 describe("state model and redaction", () => {
+  it("parses and redacts every resource instance", () => {
+    const state = parseState(JSON.stringify({
+      values: { root_module: { resources: [{
+        address: "terraform_data.multi",
+        type: "terraform_data",
+        instances: [
+          { index_key: 0, attributes: { input: "public" }, sensitive_values: {} },
+          { index_key: 1, attributes: { input: "later-secret" }, sensitive_values: { input: true } },
+        ],
+      }] } },
+    }));
+    expect(state.details.map(({ address }) => address)).toEqual([
+      "terraform_data.multi[0]",
+      "terraform_data.multi[1]",
+    ]);
+    expect(JSON.stringify(redactState(state))).not.toContain("later-secret");
+  });
+
   it("walks modules and removes marked, named, and secret-resource values", () => {
     const state = parseState(JSON.stringify(fixture));
     expect(state.resources.map(({ address }) => address)).toEqual([

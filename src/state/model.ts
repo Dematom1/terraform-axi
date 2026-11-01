@@ -39,16 +39,22 @@ export function parseState(json: string): StateModel {
         const address = value.address;
         const type = value.type;
         const mode = typeof value.mode === "string" ? value.mode : "managed";
-        resources.push({ address, type, mode, module: moduleAddress });
-        const instance = record(value.instances instanceof Array ? value.instances[0] : undefined);
-        const attributes = record(instance?.attributes) ?? {};
-        details.push({
-          address,
-          type,
-          provider: typeof value.provider_name === "string" ? value.provider_name : "",
-          attributes,
-          sensitiveValues: instance?.sensitive_values ?? {},
-        });
+        const instances = Array.isArray(value.instances) ? value.instances : [];
+        for (const rawInstance of instances) {
+          const instance = record(rawInstance);
+          if (!instance) continue;
+          const instanceAddress =
+            instance.index_key === undefined ? address : `${address}[${JSON.stringify(instance.index_key)}]`;
+          resources.push({ address: instanceAddress, type, mode, module: moduleAddress });
+          details.push({
+            address: instanceAddress,
+            type,
+            provider: typeof value.provider_name === "string" ? value.provider_name : "",
+            attributes: record(instance.attributes) ?? {},
+            sensitiveValues: instance.sensitive_values ?? {},
+          });
+        }
+        if (instances.length === 0) resources.push({ address, type, mode, module: moduleAddress });
       }
     if (Array.isArray(item.child_modules))
       for (const child of item.child_modules) {
