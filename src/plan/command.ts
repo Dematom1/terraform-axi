@@ -11,13 +11,13 @@ import { parsePlanFile } from "./show.js";
 
 /**
  * The exact plan argv. `-lock=false` keeps a read-only plan from writing a lock to the backend, and there is
- * no `-out`. No `-detailed-exitcode`: the stream's change_summary already says whether anything changes, and
- * a wrapper may remap exit code 2, so only exit code 1 (failure) is meaningful.
+ * no `-out`. With `-detailed-exitcode`, exit 2 means changes are present; only exit 1 is a failure.
  */
-export const PLAN_ARGS = ["plan", "-json", "-input=false", "-lock=false"];
+export const PLAN_ARGS = ["plan", "-json", "-input=false", "-lock=false", "-detailed-exitcode"];
+const FAILED_EXIT = 1;
 export const usage =
-  "terraform-axi plan <module> [--expect add=N,change=N,destroy=N] [--all] | terraform-axi plan --plan-json <file> [--expect ...] [--all]";
-const PLAN_TIMEOUT_MS = 30 * 60_000;
+  "terraform-axi plan <module> [--expect add=N,change=N,destroy=N] [--binary terraform|tofu] [--timeout seconds] [--full] | terraform-axi plan --plan-json <file> [--expect ...] [--full]";
+const DEFAULT_TIMEOUT_SECONDS = 30 * 60;
 const LOW_RISK_SHOWN = 25;
 const DETAIL_CHARS = 300;
 
@@ -53,7 +53,7 @@ export function renderPlan(
   options: {
     source: Record<string, string>;
     expected?: ExpectedCounts;
-    all?: boolean;
+    full?: boolean;
     apply?: string;
     module?: string;
   },
@@ -62,7 +62,7 @@ export function renderPlan(
   const risks = classifyRisks(events);
   const high = risks.filter((row) => row.level === "high");
   const low = risks.filter((row) => row.level === "low");
-  const shownLow = options.all ? low : low.slice(0, LOW_RISK_SHOWN);
+  const shownLow = options.full ? low : low.slice(0, LOW_RISK_SHOWN);
   const rows = [...high, ...shownLow].map((row) => ({
     address: row.address,
     action: row.action,
@@ -103,7 +103,7 @@ export function renderPlan(
   const help: string[] = [];
   if (high.length) help.push("Review high-risk rows (destroy, replace, iam, secret, unknown) before anyone applies");
   if (shownLow.length < low.length && options.module)
-    help.push(`Run \`terraform-axi plan ${shellWord(options.module)} --all\` to list every change`);
+    help.push(`Run \`terraform-axi plan ${shellWord(options.module)} --full\` to list every change`);
   if (options.apply && risks.length && !errors.length)
     help.push(`terraform-axi never applies; a human may run: \`${options.apply}\``);
   if (!complete && !errors.length)
@@ -115,7 +115,7 @@ export function renderPlan(
 }
 
 export async function planCommand(args: string[], config: Config): Promise<Record<string, unknown>> {
-  const { module, planJson, expected, all } = parsePlanArgs(args);
+  const { module, planJson, expected, full, binary, timeout } = parsePlanArgs(args);
   let events: PlanEvents;
   let source: Record<string, string>;
   let apply: string | undefined;
@@ -135,33 +135,35 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
     }
     source = { plan_json: planJson };
   } else {
-    const result = await run(config, module!, PLAN_TIMEOUT_MS, {
+    // `--binary` runs that executable directly, bypassing any configured wrapper.
+    const runConfig: Config = binary ? { binary, modules: config.modules } : config;
+    const result = await run(runConfig, module!, timeout * 1000, {
       args: PLAN_ARGS,
-      exitCodes: [1],
+      exitCodes: [1, 2],
       maxBuffer: 256 * 1024 * 1024,
     });
     events = parsePlanEvents(result.stdout);
     source = { module: module! };
-    if (config.wrapper) source.via = "wrapper";
+    if (runConfig.wrapper) source.via = "wrapper";
     if (result.fallbackReason) source.note = result.fallbackReason;
-    apply = applyCommand(config, module!, events);
+    apply = applyCommand(runConfig, module!, events);
     stderr = result.stderr;
     exitCode = result.exitCode;
   }
   const rendered = renderPlan(events, {
     source,
-    all,
+    full,
     ...(expected ? { expected } : {}),
     ...(apply ? { apply } : {}),
     ...(module ? { module } : {}),
   });
   const { report } = rendered;
   // A failed exit is an error even when the stream looks complete.
-  if (exitCode !== 0 && report.status !== "error") {
+  if (exitCode === FAILED_EXIT && report.status !== "error") {
     report.status = "error";
     report.exit_code = exitCode;
   }
-  const ok = rendered.ok && exitCode === 0;
+  const ok = rendered.ok && exitCode !== FAILED_EXIT;
   if (!ok && stderr.trim())
     report.stderr = stderr
       .trim()
@@ -172,17 +174,24 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
   return report;
 }
 
-/** Parses plan arguments. `--all` is a bare switch. */
+/** Parses plan arguments. `--full` is a bare switch. */
 export function parsePlanArgs(args: string[]): {
   module?: string;
   planJson?: string;
   expected?: ExpectedCounts;
-  all: boolean;
+  full: boolean;
+  binary?: "terraform" | "tofu";
+  timeout: number;
 } {
-  const all = args.includes("--all");
+  const full = args.includes("--full");
   const parsed = parseArgs(
-    args.filter((arg) => arg !== "--all"),
-    [{ name: "--expect" }, { name: "--plan-json" }],
+    args.filter((arg) => arg !== "--full"),
+    [
+      { name: "--expect" },
+      { name: "--plan-json" },
+      { name: "--binary", values: ["terraform", "tofu"] },
+      { name: "--timeout" },
+    ],
   );
   if (parsed.positional.length)
     throw new UsageError(`unexpected plan argument: ${parsed.positional[0]}; usage: ${usage}`);
@@ -190,6 +199,12 @@ export function parsePlanArgs(args: string[]): {
   const planJson = parsed.values["--plan-json"]?.[0];
   if (!module && !planJson) throw new UsageError(`plan needs a module or --plan-json <file>; usage: ${usage}`);
   if (module && planJson) throw new UsageError("give a module or --plan-json <file>, not both");
+  const binary = parsed.values["--binary"]?.[0] as "terraform" | "tofu" | undefined;
+  const timeoutText = parsed.values["--timeout"]?.[0];
+  if (planJson && (binary || timeoutText)) throw new UsageError("--binary and --timeout apply only to plan <module>");
+  const timeout = timeoutText === undefined ? DEFAULT_TIMEOUT_SECONDS : Number(timeoutText);
+  if (!/^\d+$/.test(timeoutText ?? "1") || !Number.isSafeInteger(timeout) || timeout < 1)
+    throw new UsageError(`--timeout must be a whole number of seconds, got ${timeoutText}`);
   let expected: ExpectedCounts | undefined;
   const spec = parsed.values["--expect"]?.[0];
   if (spec !== undefined) {
@@ -199,5 +214,12 @@ export function parsePlanArgs(args: string[]): {
       throw new UsageError(error instanceof Error ? error.message : String(error));
     }
   }
-  return { ...(module ? { module } : {}), ...(planJson ? { planJson } : {}), ...(expected ? { expected } : {}), all };
+  return {
+    ...(module ? { module } : {}),
+    ...(planJson ? { planJson } : {}),
+    ...(expected ? { expected } : {}),
+    ...(binary ? { binary } : {}),
+    full,
+    timeout,
+  };
 }

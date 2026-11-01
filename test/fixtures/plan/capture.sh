@@ -24,11 +24,11 @@ tf() {
 }
 
 plan() {
-  # The product's exact argv (src/plan/command.ts PLAN_ARGS).
+  # The product's exact argv. Exit 2 means changes are present.
   dir=$1
   name=$2
   shift 2
-  tf "$dir" plan -json -input=false -lock=false "$@" >"$out/$prefix-$name.jsonl"
+  tf "$dir" plan -json -input=false -lock=false -detailed-exitcode "$@" >"$out/$prefix-$name.jsonl" || [ $? -eq 2 ]
 }
 
 mkdir -p "$work/home"

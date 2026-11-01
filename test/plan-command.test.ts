@@ -135,7 +135,7 @@ describe("plan --plan-json risk flags", () => {
     });
   });
 
-  it("caps low-risk rows unless --all is given", () => {
+  it("caps low-risk rows unless --full is given", () => {
     const lines = Array.from({ length: 30 }, (_, i) =>
       JSON.stringify({
         type: "planned_change",
@@ -149,18 +149,19 @@ describe("plan --plan-json risk flags", () => {
     expect(capped.status).toBe(0);
     expect(capped.report.changes).toHaveLength(25);
     expect(capped.report.low_risk_omitted).toBe(5);
-    const all = tfaxi(["plan", "--all", "--plan-json", file]);
+    const all = tfaxi(["plan", "--full", "--plan-json", file]);
     expect(all.report.changes).toHaveLength(30);
     expect(all.report.low_risk_omitted).toBeUndefined();
   });
 });
 
 describe("plan <module> through the configured runner", () => {
-  it("runs the exact read-only plan argv and strips TF_CLI_ARGS", () => {
+  it("runs the exact read-only plan argv, treats exit 2 as changes present, and strips TF_CLI_ARGS", () => {
     const log = withFakeWrapper();
     const { status, report } = tfaxi(["plan", "infra/prod", "--expect", "add=4,change=2,destroy=4"], {
       TF_AXI_CALL_LOG: log,
       TF_AXI_FIXTURE: planFixture("terraform-1.15.8-changes.jsonl"),
+      TF_AXI_EXIT_CODE: "2",
       TF_CLI_ARGS: "-auto-approve",
       TF_CLI_ARGS_plan: `-out=${join(home, "leak.tfplan")}`,
     });
@@ -186,6 +187,7 @@ describe("plan <module> through the configured runner", () => {
     withFakeWrapper();
     const { status, report } = tfaxi(["plan", "infra/prod", "--expect", "add=4,change=2,destroy=0"], {
       TF_AXI_FIXTURE: planFixture("tofu-1.13.1-changes.jsonl"),
+      TF_AXI_EXIT_CODE: "2",
     });
     expect(status).toBe(1);
     expect(report.version).toBe("tofu 1.13.1");
@@ -229,9 +231,42 @@ describe("plan <module> through the configured runner", () => {
     withFakeWrapper();
     const { status, report } = tfaxi(["plan", "m"], {
       TF_AXI_FIXTURE: planFixture("terraform-1.15.8-truncated.jsonl"),
+      TF_AXI_EXIT_CODE: "2",
     });
     expect(status).toBe(1);
     expect(report).toMatchObject({ status: "incomplete", malformed_lines: 1 });
+  });
+
+  it("runs the raw binary with --binary, bypassing the configured wrapper", () => {
+    const log = withFakeWrapper();
+    const bin = join(home, "bin");
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, "tofu"),
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> '${log}'\n[ "$1" = version ] && { printf '{"terraform_version":"1.13.1"}\\n'; exit 0; }\ncat '${planFixture("tofu-1.13.1-changes.jsonl")}'\nexit 2\n`,
+      { mode: 0o700 },
+    );
+    const { status, report } = tfaxi(["plan", home, "--binary", "tofu"], { PATH: `${bin}:${process.env.PATH ?? ""}` });
+    expect(status).toBe(0);
+    expect(report.via).toBeUndefined();
+    expect(report.version).toBe("tofu 1.13.1");
+    expect(readFileSync(log, "utf8").trim().split("\n").at(-1)).toBe(`-chdir=${home} ${PLAN_ARGS.join(" ")}`);
+    expect(report.help).toContain(`terraform-axi never applies; a human may run: \`tofu -chdir=${home} apply\``);
+  });
+
+  it("kills a plan that outlives --timeout", () => {
+    mkdirSync(join(home, ".config", "terraform-axi"), { recursive: true });
+    const slow = join(home, "slow");
+    writeFileSync(slow, "#!/bin/sh\nsleep 30\n", { mode: 0o700 });
+    writeFileSync(
+      join(home, ".config", "terraform-axi", "config.json"),
+      JSON.stringify({ binary: "auto", modules: [], wrapper: `${slow} {module}` }),
+    );
+    const started = Date.now();
+    const { status, report } = tfaxi(["plan", "m", "--timeout", "1"]);
+    expect(status).toBe(1);
+    expect(report.error).toBe("timeout");
+    expect(Date.now() - started).toBeLessThan(10_000);
   });
 
   it("fails a nonzero exit even when the stream looks complete", () => {
@@ -260,6 +295,10 @@ describe("plan <module> through the configured runner", () => {
     [["plan", "m", "extra"], "unexpected plan argument"],
     [["plan", "m", "--expect", "add=-1"], "negative"],
     [["plan", "m", "--expect", "remove=1"], 'key "remove" is unknown'],
+    [["plan", "m", "--timeout", "0"], "--timeout must be a whole number"],
+    [["plan", "m", "--timeout", "1.5"], "--timeout must be a whole number"],
+    [["plan", "m", "--binary", "auto"], "invalid value for --binary"],
+    [["plan", "--plan-json", "x.json", "--binary", "tofu"], "apply only to plan <module>"],
   ])("rejects %j before running anything", (args, message) => {
     const log = withFakeWrapper();
     const { status, report } = tfaxi(args, { TF_AXI_CALL_LOG: log });
