@@ -69,4 +69,3 @@ This is the copy-ready document for `docs/new-axi-tool-checklist.md`. Complete e
 - [ ] Include a complete catalog entry (name, owner, description, repository, version/revision, evidence, and any principle exception) and satisfy current contribution/admission rules. **Why:** catalog entries are intended to be pinned, independently evidenced, and explicit about exceptions ([AXI catalog](https://github.com/kunchenguid/axi/blob/main/catalog.yaml); [AXI VISION](https://github.com/kunchenguid/axi/blob/main/VISION.md)). **How to verify:** validate the entry against `catalog.yaml` schema, run repository docs/catalog generation and checks, and confirm every factual claim points to source at the pin.
 
 ---
-
