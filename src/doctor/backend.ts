@@ -13,6 +13,15 @@ function maskSyntax(source: string): string {
       if (source[i] === '"' && !escaped) quoted = false;
       escaped = source[i] === "\\" && !escaped;
       if (source[i] !== "\\") escaped = false;
+    } else if (source.startsWith("<<", i)) {
+      const marker = /^<<-?([A-Za-z_]\w*)/.exec(source.slice(i));
+      if (marker) {
+        const start = source.indexOf("\n", i);
+        const terminator = start < 0 ? -1 : source.indexOf(`\n${marker[1]}`, start);
+        const end = terminator < 0 ? source.length : source.indexOf("\n", terminator + 1) < 0 ? source.length : source.indexOf("\n", terminator + 1);
+        for (let j = i; j < end; j++) if (source[j] !== "\n") chars[j] = " ";
+        i = end - 1;
+      }
     } else if (source[i] === '"') {
       quoted = true;
       escaped = false;
@@ -72,7 +81,7 @@ export function inspectBackend(module: string): Backend | undefined {
     if (!backendRange) continue;
     const header = source.slice(terraformRange[0] + backendMatch.index, terraformRange[0] + backendRange[0] - 1);
     backendType = /backend\s+"([\w-]+)"/.exec(header)?.[1];
-    body = source.slice(terraformRange[0] + backendRange[0] + backendMatch.index, terraformRange[0] + backendRange[1] + backendMatch.index);
+    body = source.slice(terraformRange[0] + backendRange[0], terraformRange[0] + backendRange[1]);
     if (body && backendType) break;
   }
   if (!body || !backendType) return undefined;

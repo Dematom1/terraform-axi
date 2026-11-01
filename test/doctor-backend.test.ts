@@ -56,6 +56,20 @@ terraform { backend "s3" { region = "us-east-1" } }`);
     expect(inspectBackend(directory)).toMatchObject({ type: "s3", region: "us-east-1" });
   });
 
+  it("ignores backend syntax inside heredocs", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(join(directory, "main.tf"), `resource "terraform_data" "x" {\n input = <<EOF\nterraform { backend "s3" { region = "x" } }\nEOF\n}`);
+    expect(inspectBackend(directory)).toBeUndefined();
+  });
+
+  it("extracts fields when backend follows another terraform block", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(join(directory, "main.tf"), 'terraform { required_version = ">= 1.0" backend "s3" { endpoint = "https://s3.example.com" region = "us-east-1" } }');
+    expect(inspectBackend(directory)).toMatchObject({ endpointHost: "s3.example.com", region: "us-east-1" });
+  });
+
   it("finds a backend in a later terraform block across module files", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
