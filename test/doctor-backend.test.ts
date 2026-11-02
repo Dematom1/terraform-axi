@@ -76,8 +76,8 @@ describe("backend reachability", () => {
         AWS_ENDPOINT_URL: "https://fallback.invalid",
       }),
     ).resolves.toBe("not probed (no endpoint derivable)");
-    await expect(probeBackend(backend, { AWS_ENDPOINT_URL: "https://global.invalid" })).resolves.toBe(
-      "unreachable (dns)",
+    await expect(probeBackend(backend, { AWS_ENDPOINT_URL: "http://127.0.0.1:1" })).resolves.toBe(
+      "unreachable (connect)",
     );
   });
 
