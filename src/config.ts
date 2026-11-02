@@ -19,6 +19,10 @@ export function readConfig(path: string): Config {
     value = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { ...defaults };
+    if (error && typeof error === "object" && "code" in error && typeof error.code === "string")
+      throw new CliError(
+        `CONFIG_FILESYSTEM_ERROR: ${error.code}: ${path}; check permissions and repair or remove this config file`,
+      );
     throw new CliError(`malformed config: ${path}`);
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new CliError(`malformed config: ${path}`);
@@ -48,6 +52,12 @@ export function writeConfig(path: string, config: Config): void {
     closeSync(fd);
     fd = undefined;
     renameSync(temp, path);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && typeof error.code === "string")
+      throw new CliError(
+        `CONFIG_FILESYSTEM_ERROR: ${error.code}: ${path}; check permissions and repair the parent directory`,
+      );
+    throw error;
   } finally {
     if (fd !== undefined) closeSync(fd);
     try {

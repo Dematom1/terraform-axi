@@ -75,8 +75,14 @@ jobs:
 
       - run: npm run build
 
+      # Stamp the checked-out source revision without changing package.json.
+      - run: npm pkg set gitHead="$(git rev-parse HEAD)"
+
       # prepack rebuilds and checks the generated skill before packing.
       - run: npm pack
+
+      - name: Assert packed source revision
+        run: test "$(tar -xOzf terraform-axi-*.tgz package/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).gitHead")" = "$(git rev-parse HEAD)"
 
       # Install npm stage support before entering the OIDC-enabled publish job.
       - run: |

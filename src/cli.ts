@@ -86,8 +86,11 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
         help: hints,
       });
     if (args[0] === "uninstall") {
-      uninstallSessionStartHooks({ marker: name });
-      return output({ hooks: "removed", help: hints });
+      const errors: string[] = [];
+      uninstallSessionStartHooks({ marker: name, onError: (message) => errors.push(message) });
+      const hooks = sessionStartHookStatus({ marker: name });
+      if (errors.length) throw new CliError(`SETUP_FAILED: ${errors.join("; ")}`, 1, errors);
+      return output({ hooks, help: hints });
     }
     if (args[0] === "hooks") {
       const errors: string[] = [];
@@ -98,10 +101,8 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
         distEntrypoints: ["dist/bin/terraform-axi-ctx.js"],
         onError: (message) => errors.push(message),
       });
-      return output({
-        hooks: errors.length ? errors : sessionStartHookStatus({ marker: name }),
-        help: hints,
-      });
+      if (errors.length) throw new CliError(`SETUP_FAILED: ${errors.join("; ")}`, 1, errors);
+      return output({ hooks: sessionStartHookStatus({ marker: name }), help: hints });
     }
     const parsed = parseArgs(args, [
       { name: "--binary", values: ["terraform", "tofu", "auto"] },
