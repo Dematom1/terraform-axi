@@ -86,7 +86,14 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       : undefined;
     return output({
       module: module ?? "not specified",
-      backend: backend ? { type: backend.type, reachability } : "not configured or module not specified",
+      backend: backend
+        ? {
+            type: backend.type,
+            ...(backend.endpointHost ? { endpoint: `${backend.endpointHost}${backend.endpointPort ? `:${backend.endpointPort}` : ""}` } : {}),
+            ...(backend.region ? { region: backend.region } : {}),
+            reachability,
+          }
+        : "not configured or module not specified",
       credentials: diagnosis?.presence ?? {},
       findings: diagnosis?.findings ?? [],
       ...(module && !backend ? { finding: "No static backend block found." } : {}),
