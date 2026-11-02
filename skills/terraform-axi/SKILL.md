@@ -11,6 +11,7 @@ See the [README command reference](https://github.com/Dematom1/terraform-axi#com
 
 ## Commands
 
+<!-- prettier-ignore -->
 | Command                                                                                     | Purpose                                                                                                                |
 | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `terraform-axi`                                                                             | Configured modules, wrapper, detected executable versions, and hints                                                   |
