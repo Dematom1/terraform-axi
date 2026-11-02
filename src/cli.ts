@@ -38,11 +38,6 @@ function describeVersion(version: unknown): { flavor: "terraform" | "opentofu" |
   return { flavor: "unknown", value: "version available" };
 }
 const hints = ["Run `terraform-axi setup` to configure Terraform/OpenTofu", "Run `terraform-axi --help` for commands"];
-const notImplemented = (command: string, args: string[]) => {
-  if (args.length === 1 && args[0] === "--help")
-    return output({ usage: `terraform-axi ${command} <module>`, status: "not implemented" });
-  throw new CliError("NOT_IMPLEMENTED: command is not implemented in scaffold");
-};
 const commands: Record<string, AxiCliCommand<undefined>> = {
   plan: async (args) => {
     if (args.length === 1 && args[0] === "--help")
@@ -84,7 +79,11 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     const module = positional[0];
     const backend = module ? inspectBackend(module) : undefined;
     const diagnosis = backend ? rules(process.env, backend) : undefined;
-    const reachability = backend ? (offline ? "not probed (offline)" : await probeBackend(backend, process.env)) : undefined;
+    const reachability = backend
+      ? offline
+        ? "not probed (offline)"
+        : await probeBackend(backend, process.env)
+      : undefined;
     return output({
       module: module ?? "not specified",
       backend: backend ? { type: backend.type, reachability } : "not configured or module not specified",

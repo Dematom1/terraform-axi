@@ -226,8 +226,6 @@ export function inspectBackend(module: string): Backend | undefined {
   const endpoint =
     value("endpoint") ?? (endpointsRange ? value("s3", values.slice(endpointsRange[0], endpointsRange[1])) : undefined);
   const endpointDetails = endpoint ? endpointTarget(endpoint) : undefined;
-  const endpointHost = endpointDetails?.host;
-  const endpointPort = endpointDetails?.port;
   const region = value("region");
   return {
     type: backendType,

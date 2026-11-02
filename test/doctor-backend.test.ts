@@ -43,16 +43,22 @@ describe("backend reachability", () => {
   });
 
   it("uses S3-specific endpoint overrides before the global override", async () => {
-    const backend = { type: "s3", endpointHost: "configured.example.com", region: "us-east-1", flags: {}, inlineCredentials: false };
+    const backend = {
+      type: "s3",
+      endpointHost: "configured.example.com",
+      region: "us-east-1",
+      flags: {},
+      inlineCredentials: false,
+    };
     await expect(
       probeBackend(backend, {
         AWS_ENDPOINT_URL_S3: "invalid endpoint",
         AWS_ENDPOINT_URL: "https://fallback.invalid",
       }),
     ).resolves.toBe("not probed (no endpoint derivable)");
-    await expect(
-      probeBackend(backend, { AWS_ENDPOINT_URL: "https://global.invalid" }),
-    ).resolves.toBe("unreachable (dns)");
+    await expect(probeBackend(backend, { AWS_ENDPOINT_URL: "https://global.invalid" })).resolves.toBe(
+      "unreachable (dns)",
+    );
   });
 
   it("skips unknown backends without a derivable endpoint", async () => {
