@@ -1,5 +1,5 @@
-import { lookup } from "node:dns/promises";
-import { connect } from "node:net";
+import { Resolver } from "node:dns/promises";
+import { connect, isIP } from "node:net";
 import { realpathSync, readdirSync, readFileSync } from "node:fs";
 import { CliError } from "../errors.js";
 import { homedir } from "node:os";
@@ -143,21 +143,27 @@ export async function probeBackend(
   }
   host ??= backend.type === "s3" && backend.region ? `s3.${backend.region}.${suffix}` : undefined;
   if (!host) return "not probed (no endpoint derivable)";
-  let address: string;
+  if (isIP(host)) return probeEndpoint(host, port);
+  const resolver = new Resolver();
   let dnsTimer: ReturnType<typeof setTimeout> | undefined;
   try {
-    ({ address } = await Promise.race([
-      lookup(host),
+    const addresses = await Promise.race([
+      Promise.any([resolver.resolve4(host), resolver.resolve6(host)]),
       new Promise<never>((_, reject) => {
-        dnsTimer = setTimeout(() => reject(new Error("DNS timeout")), 3_000);
+        dnsTimer = setTimeout(() => {
+          reject(new Error("DNS timeout"));
+          resolver.cancel();
+        }, 3_000);
       }),
-    ]));
+    ]);
+    const address = addresses[0];
+    return address ? probeEndpoint(address, port) : "unreachable (dns)";
   } catch (error) {
     return error instanceof Error && error.message === "DNS timeout" ? "unreachable (timeout)" : "unreachable (dns)";
   } finally {
     if (dnsTimer) clearTimeout(dnsTimer);
+    resolver.cancel();
   }
-  return probeEndpoint(address, port);
 }
 
 export function inspectBackend(module: string): Backend | undefined {
