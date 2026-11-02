@@ -18,6 +18,9 @@ import { lastSession, recordInvocation } from "./sessions.js";
 import { PLAN_ARGS, planCommand, usage as planUsage } from "./plan/command.js";
 import { DRIFT_ARGS, drift, driftUsage } from "./commands/drift.js";
 import { stateCommand } from "./commands/state.js";
+import { inspectBackend, probeBackend } from "./doctor/backend.js";
+import { explain } from "./doctor/explain.js";
+import { rules } from "./doctor/rules.js";
 
 const name = "terraform-axi";
 const configPath = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), name, "config.json");
@@ -35,11 +38,6 @@ function describeVersion(version: unknown): { flavor: "terraform" | "opentofu" |
   return { flavor: "unknown", value: "version available" };
 }
 const hints = ["Run `terraform-axi setup` to configure Terraform/OpenTofu", "Run `terraform-axi --help` for commands"];
-const notImplemented = (command: string, args: string[]) => {
-  if (args.length === 1 && args[0] === "--help")
-    return output({ usage: `terraform-axi ${command} <module>`, status: "not implemented" });
-  throw new CliError("NOT_IMPLEMENTED: command is not implemented in scaffold");
-};
 const commands: Record<string, AxiCliCommand<undefined>> = {
   plan: async (args) => {
     if (args.length === 1 && args[0] === "--help")
@@ -61,7 +59,49 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       });
     return output(await drift(args, config()));
   },
-  doctor: async (args) => notImplemented("doctor", args),
+  doctor: async (args) => {
+    if (args.length === 1 && args[0] === "--help")
+      return output({ usage: "terraform-axi doctor [module] [--offline] | --explain TEXT|-", help: hints });
+    if (args[0] === "--explain") {
+      if (args.length !== 2) throw new CliError("VALIDATION_ERROR: doctor --explain requires TEXT or -");
+      let diagnostic = args[1]!;
+      if (diagnostic === "-") {
+        const chunks: Buffer[] = [];
+        for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+        diagnostic = Buffer.concat(chunks).toString("utf8");
+      }
+      const explanation = explain(diagnostic);
+      return output({ matched: Boolean(explanation), ...(explanation ?? {}) });
+    }
+    const offline = args.includes("--offline");
+    const positional = args.filter((arg) => arg !== "--offline");
+    if (positional.length > 1) throw new CliError("VALIDATION_ERROR: doctor accepts at most one module");
+    const module = positional[0];
+    const backend = module ? inspectBackend(module) : undefined;
+    const diagnosis = backend ? rules(process.env, backend) : undefined;
+    const reachability = backend
+      ? offline
+        ? "not probed (offline)"
+        : await probeBackend(backend, process.env)
+      : undefined;
+    return output({
+      module: module ?? "not specified",
+      backend: backend
+        ? {
+            type: backend.type,
+            ...(backend.endpointHost
+              ? { endpoint: `${backend.endpointHost}${backend.endpointPort ? `:${backend.endpointPort}` : ""}` }
+              : {}),
+            ...(backend.region ? { region: backend.region } : {}),
+            reachability,
+          }
+        : "not configured or module not specified",
+      credentials: diagnosis?.presence ?? {},
+      findings: diagnosis?.findings ?? [],
+      ...(module && !backend ? { finding: "No static backend block found." } : {}),
+      help: hints,
+    });
+  },
   state: async (args) =>
     args.length === 1 && args[0] === "--help"
       ? output({
@@ -130,7 +170,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
 };
-const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: resources changed outside Terraform/OpenTofu (refresh-only plan)\n  doctor: backend and credential diagnostics (coming soon)\n  state: list resources or inspect one with secrets redacted\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
+const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: resources changed outside Terraform/OpenTofu (refresh-only plan)\n  doctor: backend, reachability and credential diagnostics (no init or state access)\n  state: list resources or inspect one with secrets redacted\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};

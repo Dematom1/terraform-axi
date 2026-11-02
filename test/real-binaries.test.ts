@@ -45,6 +45,15 @@ describe("real Terraform and OpenTofu", () => {
         const result = await run({ binary, modules: [] }, directory);
         expect(() => JSON.parse(result.stdout)).not.toThrow();
       }
+      const doctorModule = realModule({ "main.tf": 'terraform {\n  backend "local" {}\n}' }, binaries[0]!);
+      moduleDirs.push(doctorModule);
+      const doctor = spawnSync(process.execPath, [join(root, "dist/bin/terraform-axi.js"), "doctor", doctorModule], {
+        encoding: "utf8",
+        env,
+      });
+      expect(doctor.status).toBe(0);
+      expect(doctor.stdout).toContain("type: local");
+      expect(doctor.stdout).toContain("not probed (no endpoint derivable)");
       const setup = spawnSync(
         process.execPath,
         [join(root, "dist/bin/terraform-axi.js"), "setup", "--binary", "tofu"],

@@ -1,6 +1,7 @@
 export type Backend = {
   type: string;
   endpointHost?: string;
+  endpointPort?: number;
   region?: string;
   flags: {
     skip_credentials_validation?: boolean;
