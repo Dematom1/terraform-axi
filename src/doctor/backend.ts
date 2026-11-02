@@ -1,6 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { connect } from "node:net";
 import { realpathSync, readdirSync, readFileSync } from "node:fs";
+import { CliError } from "../errors.js";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { Backend } from "./rules.js";
@@ -117,6 +118,16 @@ export function probeEndpoint(host: string, port = 443): Promise<string> {
   });
 }
 
+function endpointTarget(value: string): { host: string; port: number } | undefined {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    return { host: url.hostname, port: Number(url.port || (url.protocol === "http:" ? 80 : 443)) };
+  } catch {
+    return undefined;
+  }
+}
+
 export async function probeBackend(
   backend: Backend,
   env: Record<string, string | undefined> = process.env,
@@ -124,12 +135,11 @@ export async function probeBackend(
   const override = backend.type === "s3" ? env.AWS_ENDPOINT_URL_S3 || env.AWS_ENDPOINT_URL : undefined;
   const suffix = backend.region?.startsWith("cn-") ? "amazonaws.com.cn" : "amazonaws.com";
   let host = backend.endpointHost;
+  let port = backend.endpointPort ?? 443;
   if (override) {
-    try {
-      host = new URL(override).hostname;
-    } catch {
-      return "not probed (no endpoint derivable)";
-    }
+    const target = endpointTarget(override);
+    if (!target) return "not probed (no endpoint derivable)";
+    ({ host, port } = target);
   }
   host ??= backend.type === "s3" && backend.region ? `s3.${backend.region}.${suffix}` : undefined;
   if (!host) return "not probed (no endpoint derivable)";
@@ -147,11 +157,16 @@ export async function probeBackend(
   } finally {
     if (dnsTimer) clearTimeout(dnsTimer);
   }
-  return probeEndpoint(address);
+  return probeEndpoint(address, port);
 }
 
 export function inspectBackend(module: string): Backend | undefined {
-  const directory = realpathSync(resolve(module));
+  let directory: string;
+  try {
+    directory = realpathSync(resolve(module));
+  } catch {
+    throw new CliError(`module directory not found or inaccessible: ${module}`);
+  }
   const unsafePath = resolve(homedir(), "Code", "infrastructure");
   let unsafe: string;
   try {
@@ -160,15 +175,21 @@ export function inspectBackend(module: string): Backend | undefined {
     unsafe = unsafePath;
   }
   const protectedPath = (path: string) => path === unsafe || path.startsWith(`${unsafe}/`);
-  if (protectedPath(directory)) throw new Error("refusing to inspect the protected infrastructure directory");
-  const source = readdirSync(directory)
-    .filter((file) => file.endsWith(".tf"))
-    .map((file) => {
-      const path = realpathSync(resolve(directory, file));
-      if (protectedPath(path)) throw new Error("refusing to inspect the protected infrastructure directory");
-      return readFileSync(path, "utf8");
-    })
-    .join("\n");
+  if (protectedPath(directory)) throw new CliError("refusing to inspect the protected infrastructure directory");
+  let source: string;
+  try {
+    source = readdirSync(directory)
+      .filter((file) => file.endsWith(".tf"))
+      .map((file) => {
+        const path = realpathSync(resolve(directory, file));
+        if (protectedPath(path)) throw new CliError("refusing to inspect the protected infrastructure directory");
+        return readFileSync(path, "utf8");
+      })
+      .join("\n");
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    throw new CliError(`module directory not found or inaccessible: ${module}`);
+  }
   const structure = maskSyntax(source);
   let backendType: string | undefined;
   let body: string | undefined;
@@ -204,16 +225,13 @@ export function inspectBackend(module: string): Backend | undefined {
   const endpointsRange = endpointsStart === undefined ? undefined : blockRange(structureBody, endpointsStart);
   const endpoint =
     value("endpoint") ?? (endpointsRange ? value("s3", values.slice(endpointsRange[0], endpointsRange[1])) : undefined);
-  let endpointHost: string | undefined;
-  try {
-    endpointHost = endpoint ? new URL(endpoint).hostname : undefined;
-  } catch {
-    endpointHost = undefined;
-  }
+  const endpointDetails = endpoint ? endpointTarget(endpoint) : undefined;
+  const endpointHost = endpointDetails?.host;
+  const endpointPort = endpointDetails?.port;
   const region = value("region");
   return {
     type: backendType,
-    ...(endpointHost ? { endpointHost } : {}),
+    ...(endpointDetails ? { endpointHost: endpointDetails.host, endpointPort: endpointDetails.port } : {}),
     ...(region ? { region } : {}),
     flags,
     inlineCredentials: /\b(?:access_key|secret_key|token|password|client_secret)\s*=/.test(maskSyntax(body)),

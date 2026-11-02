@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { CliError } from "../src/errors.js";
 import { inspectBackend, probeBackend, probeEndpoint } from "../src/doctor/backend.js";
 
 const directories: string[] = [];
@@ -22,6 +23,23 @@ describe("backend reachability", () => {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }
     await expect(probeEndpoint("127.0.0.1", address.port)).resolves.toBe("unreachable (connect)");
+  });
+
+  it("connects to the configured port from an endpoint override", async () => {
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("expected TCP listener address");
+    try {
+      await expect(
+        probeBackend(
+          { type: "s3", endpointHost: "not-used.invalid", flags: {}, inlineCredentials: false },
+          { AWS_ENDPOINT_URL_S3: `http://127.0.0.1:${address.port}` },
+        ),
+      ).resolves.toBe("reachable");
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
   });
 
   it("uses S3-specific endpoint overrides before the global override", async () => {
@@ -45,6 +63,12 @@ describe("backend reachability", () => {
 });
 
 describe("static backend inspection", () => {
+  it("translates a missing module path into a CLI error", () => {
+    const parent = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(parent);
+    expect(() => inspectBackend(join(parent, "missing"))).toThrow(CliError);
+  });
+
   it("reports backend metadata without returning inline secret values", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
@@ -61,6 +85,13 @@ describe("static backend inspection", () => {
       flags: { skip_s3_checksum: true },
     });
     expect(JSON.stringify(result)).not.toContain("never-return-this");
+  });
+
+  it("retains the port from a static endpoint URL", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(join(directory, "main.tf"), 'terraform { backend "s3" { endpoint = "http://127.0.0.1:9000" } }');
+    expect(inspectBackend(directory)).toMatchObject({ endpointHost: "127.0.0.1", endpointPort: 9000 });
   });
 
   it("reads the S3 endpoint from the endpoints map", () => {
