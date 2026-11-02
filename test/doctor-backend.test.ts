@@ -70,6 +70,18 @@ describe("static backend inspection", () => {
     expect(inspectBackend(directory)).toMatchObject({ endpointHost: "s3.example.com", region: "us-east-1" });
   });
 
+  it("does not extract endpoint or region values from heredocs", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(
+      join(directory, "main.tf"),
+      `terraform { backend "s3" {\n endpoint = <<EOF\nhttps://s3.example.com\nEOF\n region = <<-EOF\n us-east-1\n EOF\n } }`,
+    );
+    expect(inspectBackend(directory)).toMatchObject({ type: "s3" });
+    expect(inspectBackend(directory)).not.toHaveProperty("endpointHost");
+    expect(inspectBackend(directory)).not.toHaveProperty("region");
+  });
+
   it("does not extract commented endpoint or region values", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);

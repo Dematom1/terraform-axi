@@ -53,7 +53,7 @@ describe("real Terraform and OpenTofu", () => {
       });
       expect(doctor.status).toBe(0);
       expect(doctor.stdout).toContain("type: local");
-      expect(doctor.stdout).toContain("static-only; no init or state access");
+      expect(doctor.stdout).toContain("not probed (no endpoint derivable)");
       const setup = spawnSync(
         process.execPath,
         [join(root, "dist/bin/terraform-axi.js"), "setup", "--binary", "tofu"],

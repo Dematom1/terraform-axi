@@ -59,6 +59,17 @@ function maskComments(source: string): string {
       if (source[i] !== "\\") escaped = false;
     } else if (source[i] === '"') {
       quoted = true;
+    } else if (source.startsWith("<<", i)) {
+      const marker = /^<<-?([A-Za-z_]\w*)/.exec(source.slice(i));
+      if (marker) {
+        const bodyStart = source.indexOf("\n", i) + 1;
+        const terminator = new RegExp(`^${marker[1]}[\\t ]*\\r?$`, "m");
+        const indentedTerminator = new RegExp(`^[\\t ]*${marker[1]}[\\t ]*\\r?$`, "m");
+        const found = (marker[0].startsWith("<<-") ? indentedTerminator : terminator).exec(source.slice(bodyStart));
+        const end = found ? bodyStart + found.index + found[0].length : source.length;
+        for (let j = i; j < end; j++) if (source[j] !== "\\n") chars[j] = " ";
+        i = end - 1;
+      }
     } else if (source[i] === "#" || source.startsWith("//", i) || source.startsWith("/*", i)) {
       const newline = source.indexOf("\n", i);
       const end =
@@ -107,7 +118,8 @@ export function probeEndpoint(host: string, port = 443): Promise<string> {
 }
 
 export async function probeBackend(backend: Backend): Promise<string> {
-  const host = backend.endpointHost ?? (backend.type === "s3" && backend.region ? `s3.${backend.region}.amazonaws.com` : undefined);
+  const suffix = backend.region?.startsWith("cn-") ? "amazonaws.com.cn" : "amazonaws.com";
+  const host = backend.endpointHost ?? (backend.type === "s3" && backend.region ? `s3.${backend.region}.${suffix}` : undefined);
   if (!host) return "not probed (no endpoint derivable)";
   let address: string;
   let dnsTimer: ReturnType<typeof setTimeout> | undefined;
