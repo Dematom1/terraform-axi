@@ -12,6 +12,20 @@ afterEach(() => {
 });
 
 describe("backend reachability", () => {
+  it("tries all DNS address families until one connects", async () => {
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("expected TCP listener address");
+    try {
+      await expect(
+        probeBackend({ type: "s3", endpointHost: "localhost", endpointPort: address.port, flags: {}, inlineCredentials: false }),
+      ).resolves.toBe("reachable");
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+  });
+
   it("connects to a listening endpoint and reports a refused connection", async () => {
     const server = createServer();
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
