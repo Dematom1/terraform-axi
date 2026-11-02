@@ -107,7 +107,7 @@ it.each(["WARNING", "ERROR", "INFO"])("runs installed tflint and retains %s seve
   const severity = inputSeverity.toLowerCase();
   stub(
     "tflint",
-    `console.log(${JSON.stringify(JSON.stringify({ issues: [{ rule: { name: "terraform_unused_declarations", severity }, message: "Unused variable", range: { filename: "main.tf", start: { line: 1 } } }], errors: [] }))}); process.exit(2);`,
+    `console.log(${JSON.stringify(JSON.stringify({ issues: [{ rule: { name: "terraform_unused_declarations", severity: inputSeverity }, message: "Unused variable", range: { filename: "main.tf", start: { line: 1 } } }], errors: [] }))}); process.exit(2);`,
   );
   expect(lint()).toMatchObject({
     status: severity === "error" ? 1 : 0,
