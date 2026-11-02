@@ -129,12 +129,19 @@ function endpointTarget(value: string): { host: string; port: number } | undefin
   }
 }
 
+export function defaultS3Endpoint(region: string): string | undefined {
+  if (region === "us-east-1") return "s3.amazonaws.com";
+  if (/^cn-[a-z]+-\d+$/.test(region)) return `s3.${region}.amazonaws.com.cn`;
+  if (/^(?:us-gov|us-(?!iso-)|eu|ap|ca|me|af|sa|il|mx)-[a-z0-9-]+-\d+$/.test(region))
+    return `s3.${region}.amazonaws.com`;
+  return undefined;
+}
+
 export async function probeBackend(
   backend: Backend,
   env: Record<string, string | undefined> = process.env,
 ): Promise<string> {
   const override = backend.type === "s3" ? env.AWS_ENDPOINT_URL_S3 || env.AWS_ENDPOINT_URL : undefined;
-  const suffix = backend.region?.startsWith("cn-") ? "amazonaws.com.cn" : "amazonaws.com";
   let host = backend.endpointHost;
   let port = backend.endpointPort ?? 443;
   if (override) {
@@ -142,7 +149,7 @@ export async function probeBackend(
     if (!target) return "not probed (no endpoint derivable)";
     ({ host, port } = target);
   }
-  host ??= backend.type === "s3" && backend.region ? `s3.${backend.region}.${suffix}` : undefined;
+  if (!host && backend.type === "s3" && backend.region) host = defaultS3Endpoint(backend.region);
   if (!host) return "not probed (no endpoint derivable)";
   if (isIP(host)) return probeEndpoint(host, port);
   let dnsTimer: ReturnType<typeof setTimeout> | undefined;

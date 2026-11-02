@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CliError } from "../src/errors.js";
-import { inspectBackend, probeBackend, probeEndpoint } from "../src/doctor/backend.js";
+import { defaultS3Endpoint, inspectBackend, probeBackend, probeEndpoint } from "../src/doctor/backend.js";
 
 const directories: string[] = [];
 afterEach(() => {
@@ -79,6 +79,13 @@ describe("backend reachability", () => {
     await expect(probeBackend(backend, { AWS_ENDPOINT_URL: "http://127.0.0.1:1" })).resolves.toBe(
       "unreachable (connect)",
     );
+  });
+
+  it("derives known S3 endpoints and skips unsupported AWS partitions", () => {
+    expect(defaultS3Endpoint("us-east-1")).toBe("s3.amazonaws.com");
+    expect(defaultS3Endpoint("eu-west-1")).toBe("s3.eu-west-1.amazonaws.com");
+    expect(defaultS3Endpoint("cn-north-1")).toBe("s3.cn-north-1.amazonaws.com.cn");
+    expect(defaultS3Endpoint("us-iso-east-1")).toBeUndefined();
   });
 
   it("skips unknown backends without a derivable endpoint", async () => {
