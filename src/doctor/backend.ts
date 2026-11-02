@@ -147,7 +147,7 @@ export async function probeBackend(
   let dnsTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     const addresses = await Promise.race([
-      lookup(host, { all: true }).then((results) => results.map(({ address }) => address)), 
+      lookup(host, { all: true }).then((results) => results.map(({ address }) => address)),
       new Promise<never>((_, reject) => {
         dnsTimer = setTimeout(() => {
           reject(new Error("DNS timeout"));
