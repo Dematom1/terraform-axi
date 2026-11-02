@@ -34,6 +34,7 @@ Each invocation that exits with a code other than 1 (runtime failure) or 2 (usag
 
 ## Commands
 
+<!-- prettier-ignore -->
 | Command                                                                                     | Purpose                                                                                                                |
 | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `terraform-axi`                                                                             | Configured modules, wrapper, detected executable versions, and hints                                                   |
