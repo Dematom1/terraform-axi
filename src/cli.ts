@@ -18,6 +18,7 @@ import { lastSession, recordInvocation } from "./sessions.js";
 import { PLAN_ARGS, planCommand, usage as planUsage } from "./plan/command.js";
 import { DRIFT_ARGS, drift, driftUsage } from "./commands/drift.js";
 import { stateCommand } from "./commands/state.js";
+import { lint, lintUsage } from "./commands/lint.js";
 import { inspectBackend, probeBackend } from "./doctor/backend.js";
 import { explain } from "./doctor/explain.js";
 import { rules } from "./doctor/rules.js";
@@ -59,6 +60,15 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       });
     return output(await drift(args, config()));
   },
+  lint: async (args) =>
+    args.length === 1 && args[0] === "--help"
+      ? output({
+          usage: lintUsage,
+          runs: "fmt -check; validate -json only with a data directory; tflint if installed",
+          never: "init or format writes",
+          examples: ["terraform-axi lint infra/prod", "terraform-axi lint . --binary tofu"],
+        })
+      : output(await lint(args, config())),
   doctor: async (args) => {
     if (args.length === 1 && args[0] === "--help")
       return output({ usage: "terraform-axi doctor [module] [--offline] | --explain TEXT|-", help: hints });
@@ -170,7 +180,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
 };
-const help = `usage: terraform-axi <command> [args]\ncommands[6]:\n  (none)=home, plan, drift, doctor, state, setup\nsummary[6]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: resources changed outside Terraform/OpenTofu (refresh-only plan)\n  doctor: backend, reachability and credential diagnostics (no init or state access)\n  state: list resources or inspect one with secrets redacted\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
+const help = `usage: terraform-axi <command> [args]\ncommands[7]:\n  (none)=home, plan, drift, lint, doctor, state, setup\nsummary[7]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: resources changed outside Terraform/OpenTofu (refresh-only plan)\n  lint: read-only formatting, initialized validation, and optional tflint findings\n  doctor: backend, reachability and credential diagnostics (no init or state access)\n  state: list resources or inspect one with secrets redacted\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};
@@ -218,7 +228,7 @@ async function home(): Promise<string> {
     help: hints,
   });
 }
-const moduleCommands = ["plan", "drift", "doctor", "state"];
+const moduleCommands = ["plan", "drift", "lint", "doctor", "state"];
 /** The routed command name and a configured module name only, never other argument values. */
 export function invocation(argv: string[], modules: string[]): { cmd: string; module: string | null } | undefined {
   const cmd = argv.length === 0 ? "home" : argv[0]!;
@@ -241,7 +251,7 @@ export async function main(
     stdout,
     topLevelHelp: output({
       usage: "terraform-axi <command> [args]",
-      commands: ["home", "plan", "drift", "doctor", "state", "setup"],
+      commands: ["home", "plan", "drift", "lint", "doctor", "state", "setup"],
       help,
     }),
     commands,
