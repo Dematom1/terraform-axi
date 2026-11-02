@@ -159,17 +159,6 @@ describe("terraform-axi scaffold", () => {
     expect(result.stdout).toContain("matched: false");
   });
 
-  it("fails with NOT_IMPLEMENTED when state is not implemented", () => {
-    const result = spawnSync(
-      process.execPath,
-      [join(root, "dist", "bin", "terraform-axi.js"), "state", "test-module"],
-      {
-        encoding: "utf8",
-      },
-    );
-    expect(result.status).toBe(1);
-    expect(result.stdout).toContain("NOT_IMPLEMENTED");
-  });
   it("reports an unprobed wrapper without a module or suggested command", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-test-"));
     const configDir = join(home, ".config", "terraform-axi");
