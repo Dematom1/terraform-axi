@@ -119,6 +119,58 @@ it.each(["WARNING", "ERROR", "INFO"])("runs installed tflint and retains %s seve
     },
   });
 });
+it.each([undefined, null, { filename: "", start: { line: 0 } }])(
+  "preserves validation warnings with unavailable range %j and omitted detail",
+  (range) => {
+    mkdirSync(join(module, ".terraform"));
+    expect(
+      lint(undefined, {
+        VALIDATE_OUTPUT: JSON.stringify({
+          valid: true,
+          diagnostics: [{ severity: "warning", summary: "Module warning", range }],
+        }),
+      }),
+    ).toMatchObject({
+      status: 0,
+      report: {
+        count: 1,
+        findings: [{ file: null, line: null, rule: "validate", severity: "warning", message: "Module warning" }],
+      },
+    });
+  },
+);
+it("preserves module-level TFLint findings without a source location", () => {
+  stub(
+    "tflint",
+    `console.log(${JSON.stringify(JSON.stringify({ issues: [{ rule: { name: "terraform_required_version", severity: "warning" }, message: "Missing required_version", range: { filename: "", start: { line: 0 } } }], errors: [] }))}); process.exit(2);`,
+  );
+  expect(lint()).toMatchObject({
+    status: 0,
+    report: {
+      count: 1,
+      findings: [
+        {
+          file: null,
+          line: null,
+          rule: "terraform_required_version",
+          severity: "warning",
+          message: "Missing required_version",
+        },
+      ],
+    },
+  });
+});
+it("still rejects validation detail with an invalid type", () => {
+  mkdirSync(join(module, ".terraform"));
+  expect(
+    lint(undefined, {
+      VALIDATE_OUTPUT: JSON.stringify({
+        valid: true,
+        diagnostics: [{ severity: "warning", summary: "Module warning", detail: 7 }],
+      }),
+    }),
+  ).toMatchObject({ status: 1, report: { findings: [{ severity: "error", message: "invalid diagnostic text" }] } });
+});
 it("treats installed tflint execution failures as errors, not skips", () => {
   stub("tflint", "process.exit(1)");
   expect(lint()).toMatchObject({

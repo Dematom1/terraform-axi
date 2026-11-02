@@ -21,12 +21,14 @@ const text = (value: unknown): string => {
   return value;
 };
 function location(value: unknown): Pick<Finding, "file" | "line"> {
-  if (value === undefined) return { file: null, line: null };
+  if (value === undefined || value === null) return { file: null, line: null };
   const range = object(value);
+  const filename = text(range.filename);
+  if (!filename || range.start === undefined || range.start === null) return { file: null, line: null };
   const start = object(range.start);
   if (typeof start.line !== "number" || !Number.isInteger(start.line) || start.line < 1)
-    throw new Error("invalid diagnostic line");
-  return { file: text(range.filename), line: start.line };
+    return { file: null, line: null };
+  return { file: filename, line: start.line };
 }
 function diagnostics(stdout: string, tool: "validate" | "tflint"): Finding[] {
   const data = object(JSON.parse(stdout));
@@ -46,7 +48,9 @@ function diagnostics(stdout: string, tool: "validate" | "tflint"): Finding[] {
       ...location(d.range),
       rule: rule ? text(rule.name) : "validate",
       severity,
-      message: rule ? text(d.message) : [text(d.summary), text(d.detail)].filter(Boolean).join(": "),
+      message: rule
+        ? text(d.message)
+        : [text(d.summary), d.detail === undefined ? "" : text(d.detail)].filter(Boolean).join(": "),
     };
   });
   if (tool === "validate" && data.valid === false && !findings.some((f) => f.severity === "error"))
