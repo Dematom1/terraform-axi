@@ -103,7 +103,7 @@ it("honors TF_DATA_DIR and fails closed on malformed validation output", () => {
     report: { findings: [{ rule: "validate", severity: "error" }] },
   });
 });
-it.each(["warning", "error"])("runs installed tflint and retains %s severity", (severity) => {
+it.each(["warning", "error", "info"])("runs installed tflint and retains %s severity", (severity) => {
   stub(
     "tflint",
     `console.log(${JSON.stringify(JSON.stringify({ issues: [{ rule: { name: "terraform_unused_declarations", severity }, message: "Unused variable", range: { filename: "main.tf", start: { line: 1 } } }], errors: [] }))}); process.exit(2);`,

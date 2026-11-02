@@ -39,7 +39,8 @@ function diagnostics(stdout: string, tool: "validate" | "tflint"): Finding[] {
     const d = object(row);
     const rule = tool === "tflint" ? object(d.rule) : undefined;
     const severity = text(rule ? rule.severity : d.severity);
-    if (!["error", "warning", "notice"].includes(severity)) throw new Error("invalid diagnostic severity");
+    if (!(tool === "tflint" ? ["error", "warning", "info"] : ["error", "warning"]).includes(severity))
+      throw new Error("invalid diagnostic severity");
     return {
       ...location(d.range),
       rule: rule ? text(rule.name) : "validate",
