@@ -84,7 +84,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     const module = positional[0];
     const backend = module ? inspectBackend(module) : undefined;
     const diagnosis = backend ? rules(process.env, backend) : undefined;
-    const reachability = backend ? (offline ? "not probed (offline)" : await probeBackend(backend)) : undefined;
+    const reachability = backend ? (offline ? "not probed (offline)" : await probeBackend(backend, process.env)) : undefined;
     return output({
       module: module ?? "not specified",
       backend: backend ? { type: backend.type, reachability } : "not configured or module not specified",

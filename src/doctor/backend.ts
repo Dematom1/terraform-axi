@@ -117,10 +117,21 @@ export function probeEndpoint(host: string, port = 443): Promise<string> {
   });
 }
 
-export async function probeBackend(backend: Backend): Promise<string> {
+export async function probeBackend(
+  backend: Backend,
+  env: Record<string, string | undefined> = process.env,
+): Promise<string> {
+  const override = backend.type === "s3" ? env.AWS_ENDPOINT_URL_S3 || env.AWS_ENDPOINT_URL : undefined;
   const suffix = backend.region?.startsWith("cn-") ? "amazonaws.com.cn" : "amazonaws.com";
-  const host =
-    backend.endpointHost ?? (backend.type === "s3" && backend.region ? `s3.${backend.region}.${suffix}` : undefined);
+  let host = backend.endpointHost;
+  if (override) {
+    try {
+      host = new URL(override).hostname;
+    } catch {
+      return "not probed (no endpoint derivable)";
+    }
+  }
+  host ??= backend.type === "s3" && backend.region ? `s3.${backend.region}.${suffix}` : undefined;
   if (!host) return "not probed (no endpoint derivable)";
   let address: string;
   let dnsTimer: ReturnType<typeof setTimeout> | undefined;
