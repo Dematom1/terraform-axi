@@ -6,6 +6,17 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { Backend } from "./rules.js";
 
+function heredocEnd(source: string, start: number): number | undefined {
+  const marker = /^<<-?([A-Za-z_]\w*)/.exec(source.slice(start));
+  if (!marker) return undefined;
+  const lineEnd = source.indexOf("\n", start);
+  const bodyStart = lineEnd < 0 ? source.length : lineEnd + 1;
+  const terminator = new RegExp(`^${marker[1]}[\\t ]*\\r?$`, "m");
+  const indentedTerminator = new RegExp(`^[\\t ]*${marker[1]}[\\t ]*\\r?$`, "m");
+  const found = (marker[0].startsWith("<<-") ? indentedTerminator : terminator).exec(source.slice(bodyStart));
+  return found ? bodyStart + found.index + found[0].length : source.length;
+}
+
 function maskSyntax(source: string): string {
   const chars = source.split("");
   let quoted = false;
@@ -17,14 +28,8 @@ function maskSyntax(source: string): string {
       escaped = source[i] === "\\" && !escaped;
       if (source[i] !== "\\") escaped = false;
     } else if (source.startsWith("<<", i)) {
-      const marker = /^<<-?([A-Za-z_]\w*)/.exec(source.slice(i));
-      if (marker) {
-        const lineEnd = source.indexOf("\n", i);
-        const bodyStart = lineEnd < 0 ? source.length : lineEnd + 1;
-        const terminator = new RegExp(`^${marker[1]}[\\t ]*\\r?$`, "m");
-        const indentedTerminator = new RegExp(`^[\\t ]*${marker[1]}[\\t ]*\\r?$`, "m");
-        const found = (marker[0].startsWith("<<-") ? indentedTerminator : terminator).exec(source.slice(bodyStart));
-        const end = found ? bodyStart + found.index + found[0].length : source.length;
+      const end = heredocEnd(source, i);
+      if (end !== undefined) {
         for (let j = i; j < end; j++) if (source[j] !== "\n") chars[j] = " ";
         i = end - 1;
       }
@@ -61,14 +66,9 @@ function maskComments(source: string): string {
     } else if (source[i] === '"') {
       quoted = true;
     } else if (source.startsWith("<<", i)) {
-      const marker = /^<<-?([A-Za-z_]\w*)/.exec(source.slice(i));
-      if (marker) {
-        const bodyStart = source.indexOf("\n", i) + 1;
-        const terminator = new RegExp(`^${marker[1]}[\\t ]*\\r?$`, "m");
-        const indentedTerminator = new RegExp(`^[\\t ]*${marker[1]}[\\t ]*\\r?$`, "m");
-        const found = (marker[0].startsWith("<<-") ? indentedTerminator : terminator).exec(source.slice(bodyStart));
-        const end = found ? bodyStart + found.index + found[0].length : source.length;
-        for (let j = i; j < end; j++) if (source[j] !== "\\n") chars[j] = " ";
+      const end = heredocEnd(source, i);
+      if (end !== undefined) {
+        for (let j = i; j < end; j++) if (source[j] !== "\n") chars[j] = " ";
         i = end - 1;
       }
     } else if (source[i] === "#" || source.startsWith("//", i) || source.startsWith("/*", i)) {
@@ -122,7 +122,8 @@ function endpointTarget(value: string): { host: string; port: number } | undefin
   try {
     const url = new URL(value);
     if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
-    return { host: url.hostname, port: Number(url.port || (url.protocol === "http:" ? 80 : 443)) };
+    const host = url.hostname.replace(/^\[(.*)\]$/, "$1");
+    return { host, port: Number(url.port || (url.protocol === "http:" ? 80 : 443)) };
   } catch {
     return undefined;
   }

@@ -120,6 +120,13 @@ describe("static backend inspection", () => {
     expect(inspectBackend(directory)).toMatchObject({ endpointHost: "127.0.0.1", endpointPort: 9000 });
   });
 
+  it("removes IPv6 brackets from an endpoint hostname", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
+    directories.push(directory);
+    writeFileSync(join(directory, "main.tf"), 'terraform { backend "s3" { endpoint = "http://[::1]:9000" } }');
+    expect(inspectBackend(directory)).toMatchObject({ endpointHost: "::1", endpointPort: 9000 });
+  });
+
   it("reads the S3 endpoint from the endpoints map", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
@@ -140,16 +147,18 @@ describe("static backend inspection", () => {
     expect(inspectBackend(directory)).toMatchObject({ endpointHost: "s3.example.com", region: "us-east-1" });
   });
 
-  it("does not extract endpoint or region values from heredocs", () => {
+  it("ignores heredoc values and extracts later assignments", () => {
     const directory = mkdtempSync(join(tmpdir(), "tfaxi-doctor-"));
     directories.push(directory);
     writeFileSync(
       join(directory, "main.tf"),
-      `terraform { backend "s3" {\n endpoint = <<EOF\nhttps://s3.example.com\nEOF\n region = <<-EOF\n us-east-1\n EOF\n } }`,
+      `terraform { backend "s3" {\n endpoint = <<EOF\nhttps://s3.example.com\nEOF\n region = <<-EOF\n us-east-1\n EOF\n endpoint = "https://s3.real.example.com"\n region = "us-west-2"\n } }`,
     );
-    expect(inspectBackend(directory)).toMatchObject({ type: "s3" });
-    expect(inspectBackend(directory)).not.toHaveProperty("endpointHost");
-    expect(inspectBackend(directory)).not.toHaveProperty("region");
+    expect(inspectBackend(directory)).toMatchObject({
+      type: "s3",
+      endpointHost: "s3.real.example.com",
+      region: "us-west-2",
+    });
   });
 
   it("does not extract commented endpoint or region values", () => {
