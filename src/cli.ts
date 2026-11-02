@@ -89,7 +89,9 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       backend: backend
         ? {
             type: backend.type,
-            ...(backend.endpointHost ? { endpoint: `${backend.endpointHost}${backend.endpointPort ? `:${backend.endpointPort}` : ""}` } : {}),
+            ...(backend.endpointHost
+              ? { endpoint: `${backend.endpointHost}${backend.endpointPort ? `:${backend.endpointPort}` : ""}` }
+              : {}),
             ...(backend.region ? { region: backend.region } : {}),
             reachability,
           }
