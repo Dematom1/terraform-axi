@@ -10,7 +10,8 @@ export function isReleaseBotOnly(commits, { botLogin, repository, headRepository
     headRef.startsWith("release-please--") &&
     commits.length > 0 &&
     commits.every(
-      ([author, committer, verified]) => author === botLogin && committer === botLogin && verified === "true",
+      ([author, committer, verified]) =>
+        author === botLogin && (committer === botLogin || committer === "web-flow") && verified === "true",
     )
   );
 }
