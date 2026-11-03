@@ -1,5 +1,5 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>Dematom1/oss-workflows//renovate/axi.json#0000000000000000000000000000000000000000"],
+  "extends": ["github>Dematom1/oss-workflows//renovate/axi#0df7f9e0c07bf6007017b3de55eb0ad6ebd46977"],
   "enabledManagers": ["npm"]
 }

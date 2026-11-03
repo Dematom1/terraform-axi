@@ -5,12 +5,11 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
 
-# The shared workflow restricts write access to its reporting/remediation jobs.
-# Dependency scripts run in read-only jobs without persisted credentials.
+# Only the shared reporting job can write a PR comment. Dependency scripts
+# run in read-only jobs without secrets or persisted checkout credentials.
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
-  actions: read
 
 concurrency:
   group: dependency-verification-${{ github.event.pull_request.number }}
@@ -19,9 +18,9 @@ concurrency:
 jobs:
   verify:
     if: github.event.pull_request.user.login == 'renovate[bot]'
-    # REPLACE_SHARED_SHA before shipping: operations/shared worker owns this pin.
-    uses: Dematom1/oss-workflows/.github/workflows/dependency-verification.yml@0000000000000000000000000000000000000000
+    uses: Dematom1/oss-workflows/.github/workflows/dependency-verify.yml@0df7f9e0c07bf6007017b3de55eb0ad6ebd46977
     with:
+      shared-script-ref: 0df7f9e0c07bf6007017b3de55eb0ad6ebd46977
       install-command: npm ci
       build-command: npm run build
       test-command: npm test
