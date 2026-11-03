@@ -227,6 +227,7 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
     result.changes.some((change) => change.action === "unknown") ||
     result.drift.some((change) => change.action === "unknown") ||
     result.outputs.some((output) => output.action === "unknown")
-  ) result.summary = "unavailable";
+  )
+    result.summary = "unavailable";
   return result;
 }
