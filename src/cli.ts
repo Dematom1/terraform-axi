@@ -1,10 +1,4 @@
-import {
-  installSessionStartHooks,
-  runAxiCli,
-  sessionStartHookStatus,
-  uninstallSessionStartHooks,
-  type AxiCliCommand,
-} from "axi-sdk-js";
+import { installSessionStartHooks, runAxiCli, uninstallSessionStartHooks, type AxiCliCommand } from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,7 +7,8 @@ import { VERSION } from "./version.js";
 import { parseArgs } from "./args.js";
 import { readConfig, writeConfig, type Config } from "./config.js";
 import { run, validateWrapper } from "./runner.js";
-import { CliError, ReportError } from "./errors.js";
+import { CliError, ReportError, UsageError } from "./errors.js";
+import { hookStatus, repairHookDuplicates } from "./hooks.js";
 import { lastSession } from "./sessions.js";
 import { PLAN_ARGS, planCommand, usage as planUsage } from "./plan/command.js";
 import { DRIFT_ARGS, drift, driftUsage } from "./commands/drift.js";
@@ -120,7 +115,8 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
   state: async (args) =>
-    args.length === 1 && args[0] === "--help"
+    (args.length === 1 && args[0] === "--help") ||
+    (args.length === 2 && ["list", "resource"].includes(args[0] ?? "") && args[1] === "--help")
       ? output({
           usage: "terraform-axi state list <module> [--full] | state resource <module> <address> [--full]",
           help: hints,
@@ -133,19 +129,21 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
           "terraform-axi setup [--binary terraform|tofu|auto] [--wrapper command] [--module name] [--remove-module name]",
         help: hints,
       });
+    if (args.length === 2 && ["status", "hooks", "uninstall"].includes(args[0] ?? "") && args[1] === "--help")
+      return output({ usage: `terraform-axi setup ${args[0]}`, help: hints });
     if (["status", "hooks", "uninstall"].includes(args[0] ?? "") && args.length !== 1)
       throw new CliError("VALIDATION_ERROR: unexpected setup argument");
     if (args[0] === "status")
       return output({
         config: configPath,
         settings: config(),
-        hooks: sessionStartHookStatus({ marker: name }),
+        hooks: hookStatus(),
         help: hints,
       });
     if (args[0] === "uninstall") {
       const errors: string[] = [];
       uninstallSessionStartHooks({ marker: name, onError: (message) => errors.push(message) });
-      const hooks = sessionStartHookStatus({ marker: name });
+      const hooks = hookStatus();
       if (errors.length) throw new CliError(`SETUP_FAILED: ${errors.join("; ")}`, 1, errors);
       return output({ hooks, help: hints });
     }
@@ -154,12 +152,14 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       installSessionStartHooks({
         marker: name,
         execPath: join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "terraform-axi-ctx.js"),
-        binaryNames: ["terraform-axi-ctx"],
+        // Keep the absolute entrypoint: an npx PATH disappears after setup exits.
+        binaryNames: [],
         distEntrypoints: ["dist/bin/terraform-axi-ctx.js"],
         onError: (message) => errors.push(message),
       });
       if (errors.length) throw new CliError(`SETUP_FAILED: ${errors.join("; ")}`, 1, errors);
-      return output({ hooks: sessionStartHookStatus({ marker: name }), help: hints });
+      repairHookDuplicates();
+      return output({ hooks: hookStatus(), help: hints });
     }
     const parsed = parseArgs(args, [
       { name: "--binary", values: ["terraform", "tofu", "auto"] },
@@ -260,7 +260,15 @@ export async function main(
       output: `${
         error instanceof ReportError
           ? output(error.report)
-          : output({ error: error instanceof Error ? error.message : String(error), help: hints })
+          : output({
+              code:
+                error instanceof UsageError
+                  ? "VALIDATION_ERROR"
+                  : ((error instanceof CliError ? error.message.match(/^([A-Z_]+):/)?.[1] : undefined) ??
+                    (argv[0] === "setup" ? "SETUP_FAILED" : "COMMAND_FAILED")),
+              error: error instanceof Error ? error.message : String(error),
+              help: ["Check file permissions or repair malformed settings before retrying", ...hints],
+            })
       }\n`,
       exitCode: error instanceof CliError ? error.exitCode : 1,
     }),
