@@ -42,6 +42,8 @@ Ordinary commands, including `setup status`, do not write configuration or sessi
 
 `setup hooks` and `setup uninstall` rewrite agent settings files; concurrent setup runs are last-writer-wins.
 
+Known SDK limitation: `axi-sdk-js` 0.1.13 does not honor `CLAUDE_CONFIG_DIR`. Hook installation, status, and removal use `~/.claude/settings.json`, not a custom Claude directory. Custom-directory SessionStart integration remains unsupported until the SDK adds support.
+
 ## Commands
 
 <!-- prettier-ignore -->
