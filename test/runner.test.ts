@@ -147,7 +147,7 @@ describe("runner seam", () => {
     const failed = executable('printf \'{"type":"diagnostic","diagnostic":{"summary":"bad"}}\\n\'; exit 1');
     await expect(run(config(`${failed} {module}`), "mod")).rejects.toMatchObject({
       message: "failed",
-      diagnostics: [{ type: "diagnostic" }],
+      diagnostics: [{ severity: "unknown", category: "terraform_diagnostic" }],
     });
   });
   it("maps missing executable and timeout", async () => {

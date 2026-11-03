@@ -1,4 +1,4 @@
-import type { PlanChange, PlanEvents } from "./events.js";
+import { metadataAddress, reasonCode, type PlanChange, type PlanEvents } from "./events.js";
 
 export type ExpectKey = "add" | "change" | "destroy";
 export type ExpectedCounts = Partial<Record<ExpectKey, number>>;
@@ -40,7 +40,7 @@ const contributes: Record<ExpectKey, (row: PlanChange) => boolean> = {
 };
 
 const describe = (row: PlanChange) =>
-  [row.address, row.action, row.action === "unknown" ? row.raw : row.reason].filter(Boolean).join(" ");
+  [metadataAddress(row.address), row.action, row.reason ? reasonCode(row.reason) : ""].filter(Boolean).join(" ");
 
 /** Compares expected counts with the stream's `change_summary`. A missing summary fails, never counts as 0. */
 export function evaluateExpect(expected: ExpectedCounts, events: PlanEvents): ExpectResult {

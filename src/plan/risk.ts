@@ -1,4 +1,4 @@
-import type { PlanAction, PlanChange, PlanEvents } from "./events.js";
+import { reasonCode, type PlanAction, type PlanChange, type PlanEvents } from "./events.js";
 
 export type RiskFlag = "destroy" | `replace(${string})` | "iam" | "secret" | "unknown";
 export type RiskRow = PlanChange & { flags: RiskFlag[]; level: "high" | "low" };
@@ -47,7 +47,7 @@ export function classifyRisks(events: PlanEvents): RiskRow[] {
     const flags: RiskFlag[] = [];
     const type = change.type ?? "";
     if (change.action === "DESTROY" || change.action === "REPLACE") flags.push("destroy");
-    if (change.action === "REPLACE") flags.push(`replace(${change.reason ?? "unknown"})`);
+    if (change.action === "REPLACE") flags.push(`replace(${reasonCode(change.reason)})`);
     if (change.action === "unknown") flags.push("unknown");
     if (change.action !== "read") {
       if (isIamType(type)) flags.push("iam");

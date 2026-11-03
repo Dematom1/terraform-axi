@@ -45,6 +45,10 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       return output({
         usage: planUsage,
         runs: PLAN_ARGS.join(" "),
+        diagnostics:
+          "metadata only; provider text and subprocess excerpts withheld; --full lists rows, not diagnostic text",
+        wrapper_stdout:
+          "plain-text progress counted as skipped_wrapper_lines; JSON-looking lines must be complete JSON events; prefer progress on stderr",
         never: "apply, destroy, -out plan files, state writes",
         help: ["Run `terraform-axi plan <module> --expect add=0,change=0,destroy=0` to assert a no-op plan"],
       });
@@ -55,6 +59,9 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       return output({
         usage: driftUsage,
         runs: DRIFT_ARGS.join(" "),
+        diagnostics: "metadata only; provider text and subprocess excerpts withheld",
+        wrapper_stdout:
+          "plain-text progress counted as skipped_wrapper_lines; JSON-looking lines must be complete JSON events; prefer progress on stderr",
         never: "apply, refresh, -out plan files, state writes",
         help: ["Run `terraform-axi plan <module>` to see planned configuration changes"],
       });

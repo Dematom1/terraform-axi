@@ -3,7 +3,7 @@ import { parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { CliError, ReportError, UsageError } from "../errors.js";
 import { run } from "../runner.js";
-import { parsePlanEvents, type PlanEvents } from "./events.js";
+import { diagnosticMetadata, metadataAddress, reasonCode, parsePlanEvents, type PlanEvents } from "./events.js";
 import { evaluateExpect, parseExpect, type ExpectedCounts } from "./expect.js";
 import { classifyRisks } from "./risk.js";
 import { parsePlanFile } from "./show.js";
@@ -19,22 +19,6 @@ export const usage =
 const DEFAULT_TIMEOUT_SECONDS = 30 * 60;
 const MAX_TIMEOUT_SECONDS = 2_147_483;
 const LOW_RISK_SHOWN = 25;
-const DETAIL_CHARS = 300;
-
-const SECRET_ENV = /SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|_KEY|ACCESS_KEY|APPLICATION_KEY/i;
-/** Masks values of credential-like environment variables in any text copied from Terraform output. */
-export function scrub(text: string, env: NodeJS.ProcessEnv = process.env): string {
-  let result = text;
-  for (const [key, value] of Object.entries(env)) {
-    if (!value || !SECRET_ENV.test(key)) continue;
-    result =
-      value.length >= 6
-        ? result.split(value).join("[redacted]")
-        : result.replace(new RegExp(`\\b${value.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`, "g"), "[redacted]");
-  }
-  return result;
-}
-const clip = (text: string) => (text.length > DETAIL_CHARS ? `${text.slice(0, DETAIL_CHARS)}…` : text);
 const shellWord = (word: string) => (/^[\w./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`);
 
 export function renderPlan(
@@ -52,17 +36,17 @@ export function renderPlan(
   const low = risks.filter((row) => row.level === "low");
   const shownLow = options.full ? low : low.slice(0, LOW_RISK_SHOWN);
   const rows = [...high, ...shownLow].map((row) => ({
-    address: row.address,
+    address: metadataAddress(row.address),
     action: row.action,
     type: row.type ?? "",
     risk: row.level,
     flags: row.flags.join(" "),
-    reason: row.action === "unknown" ? `unrecognized action ${row.raw ?? ""}` : (row.reason ?? ""),
+    reason: row.action === "unknown" ? "unrecognized action" : row.reason ? reasonCode(row.reason) : "",
   }));
   const report: Record<string, unknown> = { ...options.source };
   if (events.version)
     report.version = events.flavor === "unknown" ? events.version : `${events.flavor} ${events.version}`;
-  // A line that is not a JSON event means lost output (a killed or truncated plan), so nothing is trusted.
+  // Malformed JSON events mean lost output; counted wrapper progress is not an event.
   const complete = events.summary !== "unavailable" && events.malformed === 0;
   report.status = errors.length ? "error" : complete ? "planned" : "incomplete";
   report.summary = events.summary;
@@ -70,14 +54,13 @@ export function renderPlan(
   report.changes = rows.length ? rows : "none";
   if (shownLow.length < low.length) report.low_risk_omitted = low.length - shownLow.length;
   if (events.drift.length)
-    report.drift = events.drift.map((row) => ({ address: row.address, action: row.action, type: row.type ?? "" }));
-  if (events.diagnostics.length)
-    report.diagnostics = events.diagnostics.map((d) => ({
-      severity: d.severity,
-      summary: clip(scrub(d.summary)),
-      address: d.address ?? "",
-      detail: d.severity === "error" && d.detail ? clip(scrub(d.detail)) : "",
+    report.drift = events.drift.map((row) => ({
+      address: metadataAddress(row.address),
+      action: row.action,
+      type: row.type ?? "",
     }));
+  if (events.diagnostics.length) report.diagnostics = events.diagnostics.map(diagnosticMetadata);
+  if (events.skippedWrapperOutput) report.skipped_wrapper_lines = events.skippedWrapperOutput;
   if (events.malformed) report.malformed_lines = events.malformed;
   if (events.unknownEvents) report.unknown_events = events.unknownEvents;
   let ok = errors.length === 0 && complete;
@@ -129,7 +112,7 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
       maxBuffer: 256 * 1024 * 1024,
     });
     stdout = result.stdout;
-    events = parsePlanEvents(stdout);
+    events = parsePlanEvents(stdout, Boolean(runConfig.wrapper));
     source = { module: module! };
     if (runConfig.wrapper) source.via = "wrapper";
     if (result.fallbackReason) source.note = result.fallbackReason;
@@ -149,12 +132,7 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
     report.exit_code = exitCode;
   }
   const ok = rendered.ok && exitCode !== FAILED_EXIT;
-  if (!ok && stderr.trim())
-    report.stderr = stderr
-      .trim()
-      .split("\n")
-      .slice(-5)
-      .map((line) => clip(scrub(line)));
+  if (!ok && stderr.trim()) report.stderr = { lines: stderr.trim().split(/\r?\n/).length, content: "withheld" };
   if (!ok && !events.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     const lines = stdout.split(/\r?\n/).filter((line) => {
       if (!line.trim()) return false;
@@ -165,7 +143,7 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
         return true;
       }
     });
-    if (lines.length) report.stdout = lines.slice(-5).map((line) => clip(scrub(line)));
+    if (lines.length) report.stdout = { lines: lines.length, content: "withheld" };
   }
   if (!ok) throw new ReportError(report);
   return report;

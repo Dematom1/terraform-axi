@@ -146,8 +146,6 @@ describe.each(binaries)("plan with real %s on a throwaway local-backend module",
     const { status, report } = tfaxi(["plan", broken]);
     expect(status).toBe(1);
     expect(report.status).toBe("error");
-    expect(report.diagnostics).toEqual([
-      expect.objectContaining({ severity: "error", summary: "Reference to undeclared resource" }),
-    ]);
+    expect(report.diagnostics).toEqual([{ severity: "error", category: "terraform_diagnostic" }]);
   });
 });

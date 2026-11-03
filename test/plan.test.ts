@@ -411,7 +411,7 @@ describe("--expect grammar", () => {
       JSON.stringify({ type: "change_summary", changes: { add: 1, change: 0, remove: 0 } }),
     ];
     expect(evaluateExpect(parseExpect("add=0"), parsePlanEvents(stream.join("\n"))).reasons).toEqual([
-      "add: expected 0, planned 1 (x.y unknown provider-action)",
+      "add: expected 0, planned 1 (x.y unknown)",
     ]);
   });
 });

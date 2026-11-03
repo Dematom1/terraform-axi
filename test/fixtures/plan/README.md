@@ -39,3 +39,5 @@ The script writes the prior state by hand instead of applying, plans once with `
 - A plan with no resource changes omits `resource_changes` entirely.
 
 `risk-flags-show.json` is hand-written: it covers IAM, secret, destroy, and replace flags on provider types the captures cannot create, plus an unrecognized action.
+
+`provider-sensitive-warning.jsonl` is synthetic: its fake provider-only value appears in diagnostic summary/detail/address, a quoted instance key, a reason, and an unknown action. Tests assert that none of these copies reach plan or drift output, without putting the value in the parent environment or printing it on assertion failure.

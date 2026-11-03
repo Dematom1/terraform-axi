@@ -24,6 +24,8 @@ export type PlanEvents = {
   diagnostics: PlanDiagnostic[];
   /** Lines that are not a JSON event object. Only the count is kept, never the content. */
   malformed: number;
+  /** Non-JSON wrapper progress lines; contents are never retained. */
+  skippedWrapperOutput?: number;
   /** Well-formed events of a type this decoder does not know. */
   unknownEvents: number;
 };
@@ -107,7 +109,38 @@ function decodeSummary(changes: unknown): PlanSummary | "unavailable" {
   return summary;
 }
 
-export function parsePlanEvents(jsonl: string): PlanEvents {
+const REASON_CODES = new Set([
+  "cannot_update",
+  "tainted",
+  "requested",
+  "replace_triggered_by",
+  "read_because_config_unknown",
+  "read_because_dependency_pending",
+  "read_because_check_nested",
+  "delete_because_no_resource_config",
+  "delete_because_no_module",
+  "delete_because_wrong_repetition",
+  "delete_because_count_index",
+  "delete_because_each_key",
+  "delete_because_no_move_target",
+]);
+
+/** Unknown reason/action text and for_each keys can contain provider-sensitive values. */
+export const reasonCode = (reason: string | undefined) => (reason && REASON_CODES.has(reason) ? reason : "unknown");
+export function metadataAddress(address: string): string {
+  const masked = address.replace(/\["(?:[^"\\]|\\.)*"\]/g, '["withheld"]');
+  return /^(?:[\w-]+(?:\[(?:\d+|"withheld")\])?)(?:\.[\w-]+(?:\[(?:\d+|"withheld")\])?)*$/.test(masked)
+    ? masked
+    : "withheld";
+}
+
+/** Diagnostic text (including addresses) is provider-controlled, not safe metadata. */
+export function diagnosticMetadata(diagnostic: PlanDiagnostic) {
+  const severity = ["error", "warning", "info"].includes(diagnostic.severity) ? diagnostic.severity : "unknown";
+  return { severity, category: "terraform_diagnostic" };
+}
+
+export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvents {
   const result: PlanEvents = {
     flavor: "unknown",
     changes: [],
@@ -124,7 +157,10 @@ export function parsePlanEvents(jsonl: string): PlanEvents {
     try {
       event = JSON.parse(line);
     } catch {
-      result.malformed++;
+      // Only configured wrappers may interleave plain text. JSON-looking lines still fail closed.
+      if (wrapperOutput && !/^\s*(?:[{"\d-]|\[|(?:true|false|null)\b)/.test(line))
+        result.skippedWrapperOutput = (result.skippedWrapperOutput ?? 0) + 1;
+      else result.malformed++;
       continue;
     }
     if (!isRecord(event) || typeof event.type !== "string") {

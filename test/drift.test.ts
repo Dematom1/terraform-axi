@@ -91,7 +91,7 @@ describe.each(["terraform-1.15.8", "tofu-1.13.1"])("drift on captured %s streams
     expect(output).toMatchObject({
       status: "error",
       exit_code: 1,
-      diagnostics: [{ severity: "error", summary: "Reference to undeclared resource" }],
+      diagnostics: [{ severity: "error", category: "terraform_diagnostic" }],
     });
     expect(output).not.toHaveProperty("drifted");
   });

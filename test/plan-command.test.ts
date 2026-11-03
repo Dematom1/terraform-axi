@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decode } from "@toon-format/toon";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PLAN_ARGS, scrub } from "../src/plan/command.js";
+import { PLAN_ARGS } from "../src/plan/command.js";
 import { parsePlanFile } from "../src/plan/show.js";
 
 const root = join(import.meta.dirname, "..");
@@ -121,7 +121,7 @@ describe("plan --plan-json risk flags", () => {
       "aws_iam_role.deploy": "create | iam",
       "aws_iam_policy.ro": "DESTROY | destroy iam",
       "aws_secretsmanager_secret_version.db": "update | secret",
-      "future_thing.x": 'unknown | unknown | unrecognized action ["teleport"]',
+      "future_thing.x": "unknown | unknown | unrecognized action",
       "output.db_password": "create | secret",
       "data.aws_iam_policy_document.ro": "read",
     });
@@ -188,6 +188,62 @@ describe("plan --plan-json risk flags", () => {
   });
 });
 
+describe("secret-safe plan and drift output", () => {
+  it("withholds provider-only diagnostic values from offline plan review", () => {
+    const result = tfaxi([
+      "plan",
+      "--plan-json",
+      planFixture("provider-sensitive-warning.jsonl"),
+      "--expect",
+      "destroy=0",
+      "--full",
+    ]);
+    expect(result.stdout.includes("synthetic-provider-sensitive-value")).toBe(false);
+    expect(result.report.diagnostics).toEqual([{ severity: "warning", category: "terraform_diagnostic" }]);
+  });
+
+  it.each(["plan", "drift"])(
+    "withholds diagnostics and failed excerpts for %s without environment secrets",
+    (command) => {
+      withFakeWrapper();
+      for (const exit of ["0", "1", "3"]) {
+        const result = tfaxi([command, "m"], {
+          TF_AXI_FIXTURE: planFixture("provider-sensitive-warning.jsonl"),
+          TF_AXI_EXIT_CODE: exit,
+          TF_AXI_STDERR: "synthetic-provider-sensitive-value\n",
+        });
+        expect(result.stdout.includes("synthetic-provider-sensitive-value")).toBe(false);
+        if (exit === "3") expect(result.report.error).toBe("failed");
+        else expect(result.report.diagnostics).toEqual([{ severity: "warning", category: "terraform_diagnostic" }]);
+      }
+    },
+  );
+
+  it.each(["plan", "drift"])("counts wrapper progress but rejects malformed or truncated %s events", (command) => {
+    withFakeWrapper();
+    const file = join(home, "progress.jsonl");
+    const summary = JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } });
+    writeFileSync(file, `Running terraform init...\n${summary}\nFinished wrapper\n`);
+    const complete = tfaxi([command, "m"], { TF_AXI_FIXTURE: file });
+    expect(complete.status).toBe(0);
+    expect(complete.report.skipped_wrapper_lines).toBe(2);
+    if (command === "plan") {
+      const offline = tfaxi(["plan", "--plan-json", file]);
+      expect(offline.status).toBe(1);
+      expect(offline.report.malformed_lines).toBe(2);
+    }
+    for (const broken of [`${summary}\n{"type":`, '{"type":', `${summary}\n[]`, `${summary}\n{"missing":"type"}`]) {
+      writeFileSync(file, `Running terraform init...\n${broken}\n`);
+      const result = tfaxi([command, "m"], { TF_AXI_FIXTURE: file });
+      expect(result.status).toBe(1);
+      expect(result.report.status).toBe("incomplete");
+      expect(result.report.malformed_lines).toBe(1);
+    }
+    writeFileSync(file, "Running terraform init...\n");
+    expect(tfaxi([command, "m"], { TF_AXI_FIXTURE: file }).report.status).toBe("incomplete");
+  });
+});
+
 describe("plan <module> through the configured runner", () => {
   it("runs the exact read-only plan argv, treats exit 2 as changes present, and strips TF_CLI_ARGS", () => {
     const log = withFakeWrapper();
@@ -246,14 +302,11 @@ describe("plan <module> through the configured runner", () => {
       TF_AXI_FIXTURE: planFixture("terraform-1.15.8-error.jsonl"),
       TF_AXI_EXIT_CODE: "1",
       TF_AXI_STDERR: `backend said ${secret}\n`,
-      AWS_SECRET_ACCESS_KEY: secret,
     });
     expect(status).toBe(1);
     expect(report.status).toBe("error");
-    expect(report.diagnostics).toEqual([
-      expect.objectContaining({ severity: "error", summary: "Reference to undeclared resource" }),
-    ]);
-    expect(report.stderr).toEqual(["backend said [redacted]"]);
+    expect(report.diagnostics).toEqual([{ severity: "error", category: "terraform_diagnostic" }]);
+    expect(report.stderr).toEqual({ lines: 1, content: "withheld" });
     expect(stdout).not.toContain(secret);
   });
 
@@ -320,10 +373,9 @@ describe("plan <module> through the configured runner", () => {
     const { status, report, stdout } = tfaxi(["plan", "m"], {
       TF_AXI_FIXTURE: fixture,
       TF_AXI_EXIT_CODE: "1",
-      AWS_SECRET_ACCESS_KEY: secret,
     });
     expect(status).toBe(1);
-    expect(report.stdout).toEqual(["backend [redacted] failed"]);
+    expect(report.stdout).toEqual({ lines: 1, content: "withheld" });
     expect(stdout).not.toContain(secret);
   });
 
@@ -334,7 +386,7 @@ describe("plan <module> through the configured runner", () => {
       TF_AXI_STDERR: "recipe `tf` not found\n",
     });
     expect(status).toBe(1);
-    expect(report).toMatchObject({ status: "error", exit_code: 1, stderr: ["recipe `tf` not found"] });
+    expect(report).toMatchObject({ status: "error", exit_code: 1, stderr: { lines: 1, content: "withheld" } });
   });
 
   it.each([
@@ -354,19 +406,5 @@ describe("plan <module> through the configured runner", () => {
     expect(status).toBe(2);
     expect(String(report.error)).toContain(message);
     expect(existsSync(log)).toBe(false);
-  });
-});
-
-describe("scrub", () => {
-  it("masks credential-like environment values only", () => {
-    const env = {
-      AWS_SECRET_ACCESS_KEY: "abcdef123",
-      B2_APPLICATION_KEY: "b2keyvalue",
-      AWS_SESSION_TOKEN: "abc",
-      HOME: "/home/user",
-    };
-    expect(scrub("x abcdef123 b2keyvalue abc abcdef xabc /home/user", env)).toBe(
-      "x [redacted] [redacted] [redacted] abcdef xabc /home/user",
-    );
   });
 });
