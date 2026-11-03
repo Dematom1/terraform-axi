@@ -40,7 +40,7 @@ Drift currently requires a live refresh-only plan; offline drift artifact input 
 
 Ordinary commands, including `setup status`, do not write configuration or session telemetry. Only setup actions change configuration. The home view and SessionStart context can still read `last_session` from existing `~/.config/terraform-axi/sessions.jsonl` history. The SessionStart hook exports the Claude Code session id through `CLAUDE_ENV_FILE`; it does not append telemetry. There is no SessionEnd hook or transcript reading.
 
-`setup hooks` and `setup uninstall` rewrite agent settings files; concurrent setup runs are last-writer-wins.
+`setup hooks` and `setup uninstall` rewrite agent settings files; concurrent setup runs are last-writer-wins. Stored hook commands use absolute paths so they work after npx exits; after moving the installation, run `setup hooks` again to refresh every agent integration.
 
 Known SDK limitation: `axi-sdk-js` 0.1.13 does not honor `CLAUDE_CONFIG_DIR`. Hook installation, status, and removal use `~/.claude/settings.json`, not a custom Claude directory. Custom-directory SessionStart integration remains unsupported until the SDK adds support.
 

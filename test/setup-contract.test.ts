@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decode } from "@toon-format/toon";
@@ -13,8 +13,8 @@ beforeEach(() => {
   env = { HOME: home, XDG_CONFIG_HOME: join(home, ".config"), PATH: process.env.PATH ?? "" };
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
-function cli(args: string[]) {
-  const result = spawnSync(process.execPath, [join(root, "dist/bin/terraform-axi.js"), ...args], {
+function cli(args: string[], installRoot = root) {
+  const result = spawnSync(process.execPath, [join(installRoot, "dist/bin/terraform-axi.js"), ...args], {
     env,
     encoding: "utf8",
   });
@@ -69,6 +69,31 @@ describe("setup contract", () => {
       chmodSync(join(home, ".config"), 0o700);
     }
   });
+
+  it("refreshes all stored hook paths after relocation", () => {
+    const originalEntrypoint = join(root, "dist/bin/terraform-axi-ctx.js");
+    expect(cli(["setup", "hooks"]).status).toBe(0);
+    const relocated = join(home, "relocated-install");
+    mkdirSync(relocated);
+    cpSync(join(root, "dist"), join(relocated, "dist"), { recursive: true });
+    cpSync(join(root, "node_modules"), join(relocated, "node_modules"), { recursive: true });
+    expect(cli(["setup", "hooks"], relocated).status).toBe(0);
+
+    const claude = JSON.parse(readFileSync(join(home, ".claude/settings.json"), "utf8"));
+    const claudeCommand = claude.hooks.SessionStart.flatMap((group: { hooks: { command: string }[] }) => group.hooks)[0].command;
+    const codex = JSON.parse(readFileSync(join(home, ".codex/hooks.json"), "utf8"));
+    const codexCommand = codex.hooks.SessionStart[0].hooks[0].command;
+    const plugin = readFileSync(join(home, ".config/opencode/plugins/axi-terraform-axi.js"), "utf8");
+    for (const command of [claudeCommand, codexCommand, plugin]) {
+      expect(command).toContain(join(relocated, "dist/bin/terraform-axi-ctx.js"));
+      expect(command).not.toContain(originalEntrypoint);
+    }
+    const executed = spawnSync("/bin/sh", ["-c", claudeCommand], {
+      env: { ...env, PATH: "" }, input: "{}", encoding: "utf8",
+    });
+    expect(executed.status).toBe(0);
+    expect(executed.stdout).toContain("terraform_axi");
+  }, 30_000);
 
   it("deduplicates legacy hooks, stores executable absolute paths and removes all installed integrations", () => {
     const path = join(home, ".claude/settings.json");
