@@ -1,10 +1,4 @@
-import {
-  installSessionStartHooks,
-  runAxiCli,
-  sessionStartHookStatus,
-  uninstallSessionStartHooks,
-  type AxiCliCommand,
-} from "axi-sdk-js";
+import { installSessionStartHooks, runAxiCli, uninstallSessionStartHooks, type AxiCliCommand } from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,8 +7,9 @@ import { VERSION } from "./version.js";
 import { parseArgs } from "./args.js";
 import { readConfig, writeConfig, type Config } from "./config.js";
 import { run, validateWrapper } from "./runner.js";
-import { CliError, ReportError } from "./errors.js";
-import { lastSession, recordInvocation } from "./sessions.js";
+import { CliError, ReportError, UsageError } from "./errors.js";
+import { hookStatus, repairHookDuplicates } from "./hooks.js";
+import { lastSession } from "./sessions.js";
 import { PLAN_ARGS, planCommand, usage as planUsage } from "./plan/command.js";
 import { DRIFT_ARGS, drift, driftUsage } from "./commands/drift.js";
 import { stateCommand } from "./commands/state.js";
@@ -120,10 +115,32 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
   state: async (args) =>
-    args.length === 1 && args[0] === "--help"
+    (args.length === 1 && args[0] === "--help") ||
+    (args.length === 2 && ["list", "resource"].includes(args[0] ?? "") && args[1] === "--help")
       ? output({
-          usage: "terraform-axi state list <module> [--full] | state resource <module> <address> [--full]",
-          help: hints,
+          usage:
+            args[0] === "list"
+              ? "terraform-axi state list <module> [--full]"
+              : args[0] === "resource"
+                ? "terraform-axi state resource <module> <address> [--full]"
+                : "terraform-axi state list <module> [--full] | state resource <module> <address> [--full]",
+          help:
+            args[0] === "list"
+              ? [
+                  "Required: configured module name.",
+                  "--full: resolve resource types from state (default: infer types from addresses); output is capped at 100 resources.",
+                  "Example: terraform-axi state list infra/prod --full",
+                ]
+              : args[0] === "resource"
+                ? [
+                    "Required: configured module name and resource address.",
+                    "--full: include untruncated attributes (default: values are truncated).",
+                    'Example: terraform-axi state resource infra/prod aws_instance.web["blue"] --full',
+                  ]
+                : [
+                    "Inspect state in a configured module without changing infrastructure.",
+                    "Run `terraform-axi state list --help` or `terraform-axi state resource --help` for command options.",
+                  ],
         })
       : stateCommand(config(), args),
   setup: async (args) => {
@@ -133,19 +150,38 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
           "terraform-axi setup [--binary terraform|tofu|auto] [--wrapper command] [--module name] [--remove-module name]",
         help: hints,
       });
+    if (args.length === 2 && ["status", "hooks", "uninstall"].includes(args[0] ?? "") && args[1] === "--help") {
+      const details = {
+        status: [
+          "Arguments: none. Read-only; reports configuration and user-level hooks for Claude Code, Codex, and OpenCode.",
+          "Example: terraform-axi setup status",
+        ],
+        hooks: [
+          "Arguments: none. Writes or repairs user-level SessionStart integrations for Claude Code, Codex, and OpenCode.",
+          "Example: terraform-axi setup hooks",
+        ],
+        uninstall: [
+          "Arguments: none. Removes Terraform-AXI user-level hooks from Claude Code, Codex, and OpenCode; preserves unrelated settings.",
+          "Example: terraform-axi setup uninstall",
+        ],
+      };
+      const detail = args[0] === "status" ? details.status : args[0] === "hooks" ? details.hooks : details.uninstall;
+      return output({ usage: `terraform-axi setup ${args[0]} [--help]`, help: detail });
+    }
     if (["status", "hooks", "uninstall"].includes(args[0] ?? "") && args.length !== 1)
       throw new CliError("VALIDATION_ERROR: unexpected setup argument");
     if (args[0] === "status")
       return output({
         config: configPath,
         settings: config(),
-        hooks: sessionStartHookStatus({ marker: name }),
+        hooks: hookStatus(),
         help: hints,
       });
     if (args[0] === "uninstall") {
+      // Codex [features].hooks is shared across tools, so uninstall retains it to avoid disabling other tools' hooks.
       const errors: string[] = [];
       uninstallSessionStartHooks({ marker: name, onError: (message) => errors.push(message) });
-      const hooks = sessionStartHookStatus({ marker: name });
+      const hooks = hookStatus();
       if (errors.length) throw new CliError(`SETUP_FAILED: ${errors.join("; ")}`, 1, errors);
       return output({ hooks, help: hints });
     }
@@ -154,12 +190,14 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       installSessionStartHooks({
         marker: name,
         execPath: join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "terraform-axi-ctx.js"),
-        binaryNames: ["terraform-axi-ctx"],
+        // Keep the absolute entrypoint: an npx PATH disappears after setup exits.
+        binaryNames: [],
         distEntrypoints: ["dist/bin/terraform-axi-ctx.js"],
         onError: (message) => errors.push(message),
       });
       if (errors.length) throw new CliError(`SETUP_FAILED: ${errors.join("; ")}`, 1, errors);
-      return output({ hooks: sessionStartHookStatus({ marker: name }), help: hints });
+      repairHookDuplicates();
+      return output({ hooks: hookStatus(), help: hints });
     }
     const parsed = parseArgs(args, [
       { name: "--binary", values: ["terraform", "tofu", "auto"] },
@@ -235,14 +273,6 @@ async function home(): Promise<string> {
     help: hints,
   });
 }
-const moduleCommands = ["plan", "drift", "lint", "doctor", "state"];
-/** The routed command name and a configured module name only, never other argument values. */
-export function invocation(argv: string[], modules: string[]): { cmd: string; module: string | null } | undefined {
-  const cmd = argv.length === 0 ? "home" : argv[0]!;
-  if (cmd !== "home" && (!Object.hasOwn(commands, cmd) || argv.includes("--help"))) return undefined;
-  const module = moduleCommands.includes(cmd) ? (argv.slice(1).find((arg) => modules.includes(arg)) ?? null) : null;
-  return { cmd, module };
-}
 export async function main(
   argv = process.argv.slice(2),
   stdout: { write: (chunk: string) => unknown } = process.stdout,
@@ -268,20 +298,18 @@ export async function main(
       output: `${
         error instanceof ReportError
           ? output(error.report)
-          : output({ error: error instanceof Error ? error.message : String(error), help: hints })
+          : output({
+              code:
+                error instanceof UsageError
+                  ? "VALIDATION_ERROR"
+                  : ((error instanceof CliError ? error.message.match(/^([A-Z_]+):/)?.[1] : undefined) ??
+                    (argv[0] === "setup" ? "SETUP_FAILED" : "COMMAND_FAILED")),
+              error: error instanceof Error ? error.message : String(error),
+              help: ["Check file permissions or repair malformed settings before retrying", ...hints],
+            })
       }\n`,
       exitCode: error instanceof CliError ? error.exitCode : 1,
     }),
   });
-  // Usage errors (2) and failures (1) are not usage worth remembering; an --expect mismatch (3) is.
-  if (process.exitCode === 1 || process.exitCode === 2) return;
-  let modules: string[] = [];
-  try {
-    modules = config().modules;
-  } catch {
-    /* malformed config: nothing to attribute */
-  }
-  const used = invocation(argv, modules);
-  if (used) recordInvocation(used.cmd, used.module);
 }
 if (import.meta.url === `file://${process.argv[1]}`) void main();
