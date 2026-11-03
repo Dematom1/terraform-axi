@@ -118,8 +118,11 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     (args.length === 1 && args[0] === "--help") ||
     (args.length === 2 && ["list", "resource"].includes(args[0] ?? "") && args[1] === "--help")
       ? output({
-          usage: "terraform-axi state list <module> [--full] | state resource <module> <address> [--full]",
-          help: hints,
+          usage:
+            args[0] === "list" ? "terraform-axi state list <module> [--full]" :
+            args[0] === "resource" ? "terraform-axi state resource <module> <address> [--full]" :
+            "terraform-axi state list <module> [--full] | state resource <module> <address> [--full]",
+          help: ["Inspect state in a configured module without changing infrastructure."],
         })
       : stateCommand(config(), args),
   setup: async (args) => {
@@ -129,8 +132,15 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
           "terraform-axi setup [--binary terraform|tofu|auto] [--wrapper command] [--module name] [--remove-module name]",
         help: hints,
       });
-    if (args.length === 2 && ["status", "hooks", "uninstall"].includes(args[0] ?? "") && args[1] === "--help")
-      return output({ usage: `terraform-axi setup ${args[0]}`, help: hints });
+    if (args.length === 2 && ["status", "hooks", "uninstall"].includes(args[0] ?? "") && args[1] === "--help") {
+      const detail =
+        args[0] === "status"
+          ? "Show Terraform-AXI configuration and installed agent hooks without changing files."
+          : args[0] === "hooks"
+            ? "Install or repair SessionStart hooks for Claude Code, Codex, and OpenCode."
+            : "Remove Terraform-AXI agent hooks while preserving unrelated agent settings.";
+      return output({ usage: `terraform-axi setup ${args[0]}`, help: [detail] });
+    }
     if (["status", "hooks", "uninstall"].includes(args[0] ?? "") && args.length !== 1)
       throw new CliError("VALIDATION_ERROR: unexpected setup argument");
     if (args[0] === "status")

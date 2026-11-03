@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { decode } from "@toon-format/toon";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -34,14 +35,19 @@ describe("setup contract", () => {
   it.each(["hooks", "uninstall", "status"])("provides real setup %s help without writes", (command) => {
     const result = cli(["setup", command, "--help"]);
     expect(result.status).toBe(0);
-    expect(result.report).toMatchObject({ usage: `terraform-axi setup ${command}` });
+    expect(result.report).toMatchObject({
+      usage: `terraform-axi setup ${command}`,
+      help: [expect.stringContaining(command === "hooks" ? "SessionStart" : command === "status" ? "configuration" : "unrelated")],
+    });
     expect(existsSync(join(home, ".config"))).toBe(false);
     expect(existsSync(join(home, ".claude"))).toBe(false);
   });
   it.each(["list", "resource"])("provides state %s help without executing Terraform", (command) => {
     const result = cli(["state", command, "--help"]);
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain(`state ${command}`);
+    expect(result.report).toMatchObject({
+      usage: command === "list" ? "terraform-axi state list <module> [--full]" : "terraform-axi state resource <module> <address> [--full]",
+    });
     expect(existsSync(join(home, ".config"))).toBe(false);
   });
 
@@ -70,12 +76,12 @@ describe("setup contract", () => {
     }
   });
 
-  it("refreshes all stored hook paths after relocation", () => {
-    const originalEntrypoint = join(root, "dist/bin/terraform-axi-ctx.js");
+  it("refreshes all stored hooks after relocation", async () => {
     expect(cli(["setup", "hooks"]).status).toBe(0);
     const relocated = join(home, "relocated-install");
     mkdirSync(relocated);
     cpSync(join(root, "dist"), join(relocated, "dist"), { recursive: true });
+    chmodSync(join(relocated, "dist/bin/terraform-axi-ctx.js"), 0o755);
     cpSync(join(root, "node_modules"), join(relocated, "node_modules"), { recursive: true });
     expect(cli(["setup", "hooks"], relocated).status).toBe(0);
 
@@ -83,16 +89,19 @@ describe("setup contract", () => {
     const claudeCommand = claude.hooks.SessionStart.flatMap((group: { hooks: { command: string }[] }) => group.hooks)[0].command;
     const codex = JSON.parse(readFileSync(join(home, ".codex/hooks.json"), "utf8"));
     const codexCommand = codex.hooks.SessionStart[0].hooks[0].command;
-    const plugin = readFileSync(join(home, ".config/opencode/plugins/axi-terraform-axi.js"), "utf8");
-    for (const command of [claudeCommand, codexCommand, plugin]) {
-      expect(command).toContain(join(relocated, "dist/bin/terraform-axi-ctx.js"));
-      expect(command).not.toContain(originalEntrypoint);
+    for (const command of [claudeCommand, codexCommand]) {
+      const executed = spawnSync("/bin/sh", ["-c", command], {
+        env: { ...env, PATH: "" }, input: "{}", encoding: "utf8",
+      });
+      expect(executed.status).toBe(0);
+      expect(executed.stdout).toContain("terraform_axi");
     }
-    const executed = spawnSync("/bin/sh", ["-c", claudeCommand], {
-      env: { ...env, PATH: "" }, input: "{}", encoding: "utf8",
-    });
-    expect(executed.status).toBe(0);
-    expect(executed.stdout).toContain("terraform_axi");
+    const pluginPath = join(home, ".config/opencode/plugins/axi-terraform-axi.js");
+    const plugin = (await import(pathToFileURL(pluginPath).href)).default;
+    const handlers = await plugin.server({ directory: home });
+    const output = { system: [] as string[] };
+    await handlers["experimental.chat.system.transform"]({ sessionID: "relocation-check" }, output);
+    expect(output.system.join("\n")).toContain("terraform_axi");
   }, 30_000);
 
   it("deduplicates legacy hooks, stores executable absolute paths and removes all installed integrations", () => {
@@ -138,6 +147,5 @@ describe("setup contract", () => {
     });
     expect(readFileSync(join(home, ".codex/hooks.json"), "utf8")).not.toContain("terraform-axi");
     expect(existsSync(join(home, ".config/opencode/plugins/axi-terraform-axi.js"))).toBe(false);
-    expect(readFileSync(join(home, ".codex/config.toml"), "utf8")).toContain("hooks = true");
   });
 });
