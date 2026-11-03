@@ -1,0 +1,32 @@
+name: Dependency verification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+
+# The shared workflow restricts write access to its reporting/remediation jobs.
+# Dependency scripts run in read-only jobs without persisted credentials.
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: dependency-verification-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: github.event.pull_request.user.login == 'renovate[bot]'
+    # REPLACE_SHARED_SHA before shipping: operations/shared worker owns this pin.
+    uses: Dematom1/oss-workflows/.github/workflows/dependency-verification.yml@0000000000000000000000000000000000000000
+    with:
+      install-command: npm ci
+      build-command: npm run build
+      test-command: npm test
+      smoke-command: npm run test:real
+      lockfile-path: package-lock.json
+      node-version: "22"
+      bisect-max-rounds: 8
+      bisect-timeout-minutes: 20

@@ -56,7 +56,7 @@ describe("terraform-axi scaffold", () => {
         const workflow = yaml.load(fs.readFileSync(process.argv[1], "utf8"));
         const steps = workflow.jobs.check.steps;
         const release = steps.find((step) => step.id === "release");
-        const gate = steps.find((step) => step.if === "steps.release.outputs.bot_only != 'true'");
+        const gate = steps.find((step) => step.if?.includes("steps.release.outputs.bot_only != 'true'"));
         process.stdout.write(JSON.stringify({
           releaseEnvironment: release.env,
           gateIf: gate.if,
@@ -70,7 +70,11 @@ describe("terraform-axi scaffold", () => {
       } = JSON.parse(
         execFileSync(process.execPath, ["-e", parseWorkflow, workflowPath], { cwd: root, encoding: "utf8" }),
       );
-      expect(contract.gateIf).toBe("steps.release.outputs.bot_only != 'true'");
+      expect(contract.gateIf).toBe(
+        workflowName === "no-mistakes-required"
+          ? "github.event.pull_request.user.login != 'renovate[bot]' && steps.release.outputs.bot_only != 'true'"
+          : "steps.release.outputs.bot_only != 'true'",
+      );
       expect(contract.trustedCheckout).toBe(true);
       expect(contract.releaseEnvironment).toMatchObject({
         REPOSITORY: "${{ github.repository }}",
