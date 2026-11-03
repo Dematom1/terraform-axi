@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { decode } from "@toon-format/toon";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -36,8 +36,11 @@ describe("setup contract", () => {
     const result = cli(["setup", command, "--help"]);
     expect(result.status).toBe(0);
     expect(result.report).toMatchObject({
-      usage: `terraform-axi setup ${command}`,
-      help: [expect.stringContaining(command === "hooks" ? "SessionStart" : command === "status" ? "configuration" : "unrelated")],
+      usage: `terraform-axi setup ${command} [--help]`,
+      help: expect.arrayContaining([
+        expect.stringContaining(command === "hooks" ? "SessionStart" : command === "status" ? "Read-only" : "Removes"),
+        expect.stringContaining(`terraform-axi setup ${command}`),
+      ]),
     });
     expect(existsSync(join(home, ".config"))).toBe(false);
     expect(existsSync(join(home, ".claude"))).toBe(false);
@@ -47,6 +50,11 @@ describe("setup contract", () => {
     expect(result.status).toBe(0);
     expect(result.report).toMatchObject({
       usage: command === "list" ? "terraform-axi state list <module> [--full]" : "terraform-axi state resource <module> <address> [--full]",
+      help: expect.arrayContaining([
+        expect.stringContaining("Required:"),
+        expect.stringContaining("--full:"),
+        expect.stringContaining(`terraform-axi state ${command}`),
+      ]),
     });
     expect(existsSync(join(home, ".config"))).toBe(false);
   });
@@ -97,11 +105,28 @@ describe("setup contract", () => {
       expect(executed.stdout).toContain("terraform_axi");
     }
     const pluginPath = join(home, ".config/opencode/plugins/axi-terraform-axi.js");
-    const plugin = (await import(pathToFileURL(pluginPath).href)).default;
-    const handlers = await plugin.server({ directory: home });
-    const output = { system: [] as string[] };
-    await handlers["experimental.chat.system.transform"]({ sessionID: "relocation-check" }, output);
-    expect(output.system.join("\n")).toContain("terraform_axi");
+    const pluginUrl = pathToFileURL(pluginPath).href;
+    const script = `
+      const plugin = (await import(${JSON.stringify(pluginUrl)})).default;
+      const handlers = await plugin.server({ directory: process.env.HOME });
+      const output = { system: [] };
+      await handlers["experimental.chat.system.transform"]({ sessionID: "relocation-check" }, output);
+      process.stdout.write(output.system.join("\\n"));
+    `;
+    const originalCtx = join(root, "dist/bin/terraform-axi-ctx.js");
+    const unavailableCtx = `${originalCtx}.unavailable`;
+    renameSync(originalCtx, unavailableCtx);
+    try {
+      const executed = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+        env: { HOME: home, XDG_CONFIG_HOME: join(home, ".config"), PATH: dirname(process.execPath) },
+        cwd: home,
+        encoding: "utf8",
+      });
+      expect(executed.status).toBe(0);
+      expect(executed.stdout).toContain("terraform_axi");
+    } finally {
+      renameSync(unavailableCtx, originalCtx);
+    }
   }, 30_000);
 
   it("deduplicates legacy hooks, stores executable absolute paths and removes all installed integrations", () => {

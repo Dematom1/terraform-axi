@@ -122,7 +122,12 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
             args[0] === "list" ? "terraform-axi state list <module> [--full]" :
             args[0] === "resource" ? "terraform-axi state resource <module> <address> [--full]" :
             "terraform-axi state list <module> [--full] | state resource <module> <address> [--full]",
-          help: ["Inspect state in a configured module without changing infrastructure."],
+          help:
+            args[0] === "list"
+              ? ["Required: configured module name.", "--full: resolve resource types from state (default: infer types from addresses); output is capped at 100 resources.", "Example: terraform-axi state list infra/prod --full"]
+              : args[0] === "resource"
+                ? ["Required: configured module name and resource address.", "--full: include untruncated attributes (default: values are truncated).", 'Example: terraform-axi state resource infra/prod aws_instance.web["blue"] --full']
+                : ["Inspect state in a configured module without changing infrastructure.", "Run `terraform-axi state list --help` or `terraform-axi state resource --help` for command options."],
         })
       : stateCommand(config(), args),
   setup: async (args) => {
@@ -133,13 +138,13 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
         help: hints,
       });
     if (args.length === 2 && ["status", "hooks", "uninstall"].includes(args[0] ?? "") && args[1] === "--help") {
-      const detail =
-        args[0] === "status"
-          ? "Show Terraform-AXI configuration and installed agent hooks without changing files."
-          : args[0] === "hooks"
-            ? "Install or repair SessionStart hooks for Claude Code, Codex, and OpenCode."
-            : "Remove Terraform-AXI agent hooks while preserving unrelated agent settings.";
-      return output({ usage: `terraform-axi setup ${args[0]}`, help: [detail] });
+      const details = {
+        status: ["Arguments: none. Read-only; reports configuration and user-level hooks for Claude Code, Codex, and OpenCode.", "Example: terraform-axi setup status"],
+        hooks: ["Arguments: none. Writes or repairs user-level SessionStart integrations for Claude Code, Codex, and OpenCode.", "Example: terraform-axi setup hooks"],
+        uninstall: ["Arguments: none. Removes Terraform-AXI user-level hooks from Claude Code, Codex, and OpenCode; preserves unrelated settings.", "Example: terraform-axi setup uninstall"],
+      };
+      const detail = args[0] === "status" ? details.status : args[0] === "hooks" ? details.hooks : details.uninstall;
+      return output({ usage: `terraform-axi setup ${args[0]} [--help]`, help: detail });
     }
     if (["status", "hooks", "uninstall"].includes(args[0] ?? "") && args.length !== 1)
       throw new CliError("VALIDATION_ERROR: unexpected setup argument");
