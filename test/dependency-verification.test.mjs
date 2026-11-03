@@ -131,11 +131,14 @@ describe("same-head workflow verification", () => {
   });
 
   it("checks beyond 30 full pages before accepting an older success", async () => {
-    const runs = [...Array.from({ length: 3000 }, (_, id) => ({ ...run, id: id + 1 })), {
-      ...run,
-      id: 4000,
-      conclusion: "failure",
-    }];
+    const runs = [
+      ...Array.from({ length: 3000 }, (_, id) => ({ ...run, id: id + 1 })),
+      {
+        ...run,
+        id: 4000,
+        conclusion: "failure",
+      },
+    ];
     await expect(verify(fixtureAPI({ runs }))).rejects.toThrow("failed");
   });
 
