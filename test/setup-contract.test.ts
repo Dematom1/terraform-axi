@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -85,13 +85,18 @@ describe("setup contract", () => {
   });
 
   it("refreshes all stored hooks after relocation", async () => {
-    expect(cli(["setup", "hooks"]).status).toBe(0);
-    const relocated = join(home, "relocated-install");
-    mkdirSync(relocated);
-    cpSync(join(root, "dist"), join(relocated, "dist"), { recursive: true });
-    chmodSync(join(relocated, "dist/bin/terraform-axi-ctx.js"), 0o755);
-    cpSync(join(root, "node_modules"), join(relocated, "node_modules"), { recursive: true });
+    const original = join(home, "original install");
+    const relocated = join(home, "relocated install's copy");
+    for (const install of [original, relocated]) {
+      mkdirSync(install);
+      cpSync(join(root, "dist"), join(install, "dist"), { recursive: true });
+      chmodSync(join(install, "dist/bin/terraform-axi-ctx.js"), 0o755);
+      cpSync(join(root, "node_modules"), join(install, "node_modules"), { recursive: true });
+    }
+    expect(cli(["setup", "hooks"], original).status).toBe(0);
     expect(cli(["setup", "hooks"], relocated).status).toBe(0);
+    rmSync(original, { recursive: true, force: true });
+    expect(existsSync(join(original, "dist/bin/terraform-axi.js"))).toBe(false);
 
     const claude = JSON.parse(readFileSync(join(home, ".claude/settings.json"), "utf8"));
     const claudeCommand = claude.hooks.SessionStart.flatMap((group: { hooks: { command: string }[] }) => group.hooks)[0].command;
@@ -99,7 +104,7 @@ describe("setup contract", () => {
     const codexCommand = codex.hooks.SessionStart[0].hooks[0].command;
     for (const command of [claudeCommand, codexCommand]) {
       const executed = spawnSync("/bin/sh", ["-c", command], {
-        env: { ...env, PATH: "" }, input: "{}", encoding: "utf8",
+        env: { ...env, PATH: dirname(process.execPath) }, cwd: tmpdir(), input: "{}", encoding: "utf8",
       });
       expect(executed.status).toBe(0);
       expect(executed.stdout).toContain("terraform_axi");
@@ -113,20 +118,13 @@ describe("setup contract", () => {
       await handlers["experimental.chat.system.transform"]({ sessionID: "relocation-check" }, output);
       process.stdout.write(output.system.join("\\n"));
     `;
-    const originalCtx = join(root, "dist/bin/terraform-axi-ctx.js");
-    const unavailableCtx = `${originalCtx}.unavailable`;
-    renameSync(originalCtx, unavailableCtx);
-    try {
-      const executed = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
-        env: { HOME: home, XDG_CONFIG_HOME: join(home, ".config"), PATH: dirname(process.execPath) },
-        cwd: home,
-        encoding: "utf8",
-      });
-      expect(executed.status).toBe(0);
-      expect(executed.stdout).toContain("terraform_axi");
-    } finally {
-      renameSync(unavailableCtx, originalCtx);
-    }
+    const executed = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+      env: { HOME: home, XDG_CONFIG_HOME: join(home, ".config"), PATH: dirname(process.execPath) },
+      cwd: tmpdir(),
+      encoding: "utf8",
+    });
+    expect(executed.status).toBe(0);
+    expect(executed.stdout).toContain("terraform_axi");
   }, 30_000);
 
   it("deduplicates legacy hooks, stores executable absolute paths and removes all installed integrations", () => {
