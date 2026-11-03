@@ -223,6 +223,10 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
         if (!PROGRESS.test(event.type)) result.unknownEvents++;
     }
   }
-  if (result.outputs.some((output) => output.action === "unknown")) result.summary = "unavailable";
+  if (
+    result.changes.some((change) => change.action === "unknown") ||
+    result.drift.some((change) => change.action === "unknown") ||
+    result.outputs.some((output) => output.action === "unknown")
+  ) result.summary = "unavailable";
   return result;
 }
