@@ -56,26 +56,39 @@ describe("terraform-axi scaffold", () => {
         const workflow = yaml.load(fs.readFileSync(process.argv[1], "utf8"));
         const steps = workflow.jobs.check.steps;
         const release = steps.find((step) => step.id === "release");
-        const gate = steps.find((step) => step.if?.includes("steps.release.outputs.bot_only != 'true'"));
+        const action = steps.find((step) => step.name === (process.argv[2] === "no-mistakes-required"
+          ? "Verify no-mistakes signature and pipeline attestation in PR body"
+          : "Check PR does not modify release-please-generated files"));
         process.stdout.write(JSON.stringify({
+          jobIf: workflow.jobs.check.if ?? "true",
+          actionIf: action.if ?? "true",
           releaseEnvironment: release.env,
-          gateIf: gate.if,
-          trustedCheckout: steps.some((step) => step.with?.path === "trusted"),
         }));
       `;
       const contract: {
+        jobIf: string;
+        actionIf: string;
         releaseEnvironment: Record<string, string>;
-        gateIf: string;
-        trustedCheckout: boolean;
       } = JSON.parse(
-        execFileSync(process.execPath, ["-e", parseWorkflow, workflowPath], { cwd: root, encoding: "utf8" }),
+        execFileSync(process.execPath, ["-e", parseWorkflow, workflowPath, workflowName], {
+          cwd: root,
+          encoding: "utf8",
+        }),
       );
-      expect(contract.gateIf).toBe(
-        workflowName === "no-mistakes-required"
-          ? "github.event.pull_request.user.login != 'renovate[bot]' && steps.release.outputs.bot_only != 'true'"
-          : "steps.release.outputs.bot_only != 'true'",
-      );
-      expect(contract.trustedCheckout).toBe(true);
+      const runs = (author: string, botOnly: boolean) => {
+        const expression = `${contract.jobIf} && ${contract.actionIf}`
+          .replaceAll("github.event.pull_request.user.login", JSON.stringify(author))
+          .replaceAll("steps.release.outputs.bot_only", JSON.stringify(String(botOnly)));
+        return Function(`return (${expression})`)() as boolean;
+      };
+      const authors = [
+        ["human", false, true],
+        ["renovate[bot]", false, workflowName === "guard-generated-files"],
+        ["app[bot]", true, false],
+        ["github-actions[bot]", false, false],
+        ["dependabot[bot]", false, workflowName === "guard-generated-files"],
+      ] as const;
+      for (const [author, botOnly, expected] of authors) expect(runs(author, botOnly)).toBe(expected);
       expect(contract.releaseEnvironment).toMatchObject({
         REPOSITORY: "${{ github.repository }}",
         HEAD_REPOSITORY: "${{ github.event.pull_request.head.repo.full_name }}",
