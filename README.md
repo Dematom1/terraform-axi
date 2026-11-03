@@ -26,6 +26,16 @@ terraform-axi setup uninstall  # remove terraform-axi-managed user-level hooks o
 
 The wrapper is optional. Use `{module}` as the module placeholder. Credentials are inherited by Terraform/OpenTofu from the environment. Never put credentials in arguments or config.
 
+### Wrapper stdout and diagnostic safety
+
+For `plan` and `drift`, wrappers must preserve complete, newline-delimited Terraform/OpenTofu JSON events and the Terraform exit code (0 = success, 2 = changes, 1 = error). Credential wrappers may initialize Terraform and inject credentials before invoking it. Send progress to stderr when possible. Plain-text stdout progress such as `Running terraform init...` is tolerated before, between, or after events and counted as `skipped_wrapper_lines`; its content is never emitted. This tolerance applies only to configured wrappers, not direct binaries or `--plan-json` files.
+
+JSON-looking lines (starting with `{`, `[`, `"`, a number, or the literals `true`, `false`, `null`, after whitespace) must be valid JSON event objects. Malformed/truncated JSON, non-event JSON values, and streams without a valid change summary still fail as incomplete. Do not split an event across lines or prefix JSON with progress text. Arbitrary plain text cannot be distinguished from a wrapper log; the wrapper must not transform broken events into plain text. For version, state, and lint operations, keep stdout in the underlying command's format; this progress tolerance is specific to plan/drift streams.
+
+Plan and drift diagnostics emit severity and a fixed category only, never provider-controlled summary, detail, or diagnostic address text. Failed subprocess stdout/stderr excerpts are withheld, including failures outside Terraform's normal exit codes. No environment-based secret guessing is used. Resource addresses retain structural names but withhold quoted instance keys; reason codes are allowlisted and unknown action text is withheld. `--full` expands the row limit, not diagnostic detail. There is no unsafe diagnostic-text opt-in; investigate provider errors separately in a trusted terminal.
+
+Drift currently requires a live refresh-only plan; offline drift artifact input remains a follow-up. Offline plan review is available through `plan --plan-json`.
+
 ## Session memory
 
 Each invocation that exits with a code other than 1 (runtime failure) or 2 (usage error) appends one line to `~/.config/terraform-axi/sessions.jsonl`: the command name, the module name when it is a configured module, a timestamp, and the first 12 hex characters of the SHA-256 of the agent session id. Argument values, paths outside the module registry, environment values, and raw session ids are never stored. The SessionStart hook exports the Claude Code session id through `CLAUDE_ENV_FILE`; without it, lines are unkeyed and do not count toward `last_session`. The home view and SessionStart context show `last_session`, the command and module counts of the most recent other session, and the home view recommends only implemented commands. There is no SessionEnd hook, no transcript reading, and no lock: `last_session` is derived from the log when it is read. The file rotates to `sessions.jsonl.1` above 1 MB, keeping one old generation.

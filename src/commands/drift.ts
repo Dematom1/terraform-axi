@@ -2,22 +2,19 @@ import { resolve } from "node:path";
 import { parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { ReportError, UsageError } from "../errors.js";
-import { PLAN_ARGS, scrub } from "../plan/command.js";
-import { parsePlanEvents, type PlanChange } from "../plan/events.js";
+import { PLAN_ARGS } from "../plan/command.js";
+import { diagnosticMetadata, metadataAddress, parsePlanEvents, type PlanChange } from "../plan/events.js";
 import { run, wrapperArgs } from "../runner.js";
 
 /** The plan argv plus `-refresh-only`: compares state with real infrastructure, never with configuration. */
 export const DRIFT_ARGS = [...PLAN_ARGS, "-refresh-only"];
 export const driftUsage = "terraform-axi drift <module> [--binary terraform|tofu]";
 const MAX_ROWS = 20;
-const DETAIL_CHARS = 300;
 const TIMEOUT_MS = 600_000;
 
 // Drift is reported in Terraform's own words: a resource deleted out of band is `delete`, not a planned DESTROY.
 const DRIFT_ACTION: Partial<Record<PlanChange["action"], string>> = { DESTROY: "delete", REPLACE: "replace" };
-const driftAction = (row: PlanChange) =>
-  row.action === "unknown" ? `unknown(${row.raw ?? "missing"})` : (DRIFT_ACTION[row.action] ?? row.action);
-const clip = (text: string) => (text.length > DETAIL_CHARS ? `${text.slice(0, DETAIL_CHARS)}…` : text);
+const driftAction = (row: PlanChange) => DRIFT_ACTION[row.action] ?? row.action;
 const shellWord = (word: string) => (/^[\w./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`);
 
 /**
@@ -37,41 +34,33 @@ export async function drift(args: string[], config: Config): Promise<Record<stri
     exitCodes: [1, 2],
     maxBuffer: 256 * 1024 * 1024,
   });
-  const events = parsePlanEvents(result.stdout);
+  const events = parsePlanEvents(result.stdout, Boolean(runConfig.wrapper));
   const report: Record<string, unknown> = { module };
   if (runConfig.wrapper) report.via = "wrapper";
   if (result.fallbackReason) report.note = result.fallbackReason;
   if (events.version)
     report.version = events.flavor === "unknown" ? events.version : `${events.flavor} ${events.version}`;
 
+  if (events.diagnostics.length) report.diagnostics = events.diagnostics.map(diagnosticMetadata);
+  if (events.skippedWrapperOutput) report.skipped_wrapper_lines = events.skippedWrapperOutput;
+  if (events.malformed) report.malformed_lines = events.malformed;
   const errors = events.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
   if (errors.length || result.exitCode === 1) {
     report.status = "error";
     if (result.exitCode) report.exit_code = result.exitCode;
-    if (errors.length)
-      report.diagnostics = errors.map((d) => ({
-        severity: d.severity,
-        summary: clip(scrub(d.summary)),
-        address: d.address ?? "",
-        detail: d.detail ? clip(scrub(d.detail)) : "",
-      }));
-    else if (result.stderr.trim())
-      report.stderr = result.stderr
-        .trim()
-        .split("\n")
-        .slice(-5)
-        .map((line) => clip(scrub(line)));
+    if (result.stderr.trim())
+      report.stderr = { lines: result.stderr.trim().split(/\r?\n/).length, content: "withheld" };
     report.help = ["Fix the reported errors, then rerun drift"];
     throw new ReportError(report);
   }
-  // A line that is not a JSON event means lost output (a killed or truncated plan), so drift rows may be missing.
+  // Malformed JSON events mean drift rows may be missing; wrapper progress is counted separately.
   if (events.summary === "unavailable" || events.malformed) {
     report.status = "incomplete";
     report.help = ["The plan output is incomplete; rerun drift before trusting it"];
     throw new ReportError(report);
   }
 
-  const rows = events.drift.map((row) => ({ action: driftAction(row), address: row.address }));
+  const rows = events.drift.map((row) => ({ action: driftAction(row), address: metadataAddress(row.address) }));
   report.status = rows.length ? "drift detected" : "no drift";
   report.drifted = rows.length;
   if (rows.length) {

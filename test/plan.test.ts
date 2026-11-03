@@ -280,6 +280,12 @@ describe("change_summary", () => {
       parsePlanEvents(JSON.stringify({ type: "planned_change", change: { resource, action: "create" } })).summary,
     ).toBe("unavailable");
   });
+
+  it.each(["planned_change", "resource_drift"])("rejects unknown actions in %s events", (type) => {
+    const event = { type, change: { resource, action: "provider-sensitive-action" } };
+    const summary = { type: "change_summary", changes: { add: 0, change: 0, remove: 0 } };
+    expect(parsePlanEvents([JSON.stringify(event), JSON.stringify(summary)].join("\n")).summary).toBe("unavailable");
+  });
 });
 
 describe("stream tolerance", () => {
@@ -411,7 +417,7 @@ describe("--expect grammar", () => {
       JSON.stringify({ type: "change_summary", changes: { add: 1, change: 0, remove: 0 } }),
     ];
     expect(evaluateExpect(parseExpect("add=0"), parsePlanEvents(stream.join("\n"))).reasons).toEqual([
-      "add: expected 0, planned 1 (x.y unknown provider-action)",
+      "planned counts unavailable: the plan has no complete change summary",
     ]);
   });
 });

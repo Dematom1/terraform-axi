@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
 import { CliError } from "./errors.js";
+import { diagnosticMetadata, parsePlanEvents } from "./plan/events.js";
 import type { Config } from "./config.js";
 
 const execute = promisify(execFile);
@@ -184,16 +185,7 @@ export async function run(
     const diagnostics =
       options.args?.[0] === "state" || options.args?.[0] === "show"
         ? []
-        : stdout.split("\n").flatMap((line) => {
-            try {
-              const event: unknown = JSON.parse(line);
-              return event && typeof event === "object" && "type" in event && event.type === "diagnostic"
-                ? [event]
-                : [];
-            } catch {
-              return [];
-            }
-          });
+        : parsePlanEvents(stdout).diagnostics.map(diagnosticMetadata);
     throw new CliError(category, 1, diagnostics);
   }
 }

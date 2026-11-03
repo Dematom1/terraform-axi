@@ -1,0 +1,4 @@
+{"type":"diagnostic","diagnostic":{"severity":"warning","summary":"Provider received synthetic-provider-sensitive-value","detail":"synthetic-provider-sensitive-value","address":"synthetic-provider-sensitive-value"}}
+{"type":"resource_drift","change":{"resource":{"addr":"terraform_data.example[\"synthetic-provider-sensitive-value\"]","resource_type":"terraform_data"},"action":"synthetic-provider-sensitive-value","reason":"synthetic-provider-sensitive-value"}}
+{"type":"planned_change","change":{"resource":{"addr":"terraform_data.example[\"synthetic-provider-sensitive-value\"]","resource_type":"terraform_data"},"action":"replace","reason":"synthetic-provider-sensitive-value"}}
+{"type":"change_summary","changes":{"add":1,"change":0,"remove":1}}
