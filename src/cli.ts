@@ -141,6 +141,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
         help: hints,
       });
     if (args[0] === "uninstall") {
+      // Codex [features].hooks is shared across tools, so uninstall retains it to avoid disabling other tools' hooks.
       const errors: string[] = [];
       uninstallSessionStartHooks({ marker: name, onError: (message) => errors.push(message) });
       const hooks = hookStatus();
