@@ -49,7 +49,10 @@ describe("setup contract", () => {
     const result = cli(["state", command, "--help"]);
     expect(result.status).toBe(0);
     expect(result.report).toMatchObject({
-      usage: command === "list" ? "terraform-axi state list <module> [--full]" : "terraform-axi state resource <module> <address> [--full]",
+      usage:
+        command === "list"
+          ? "terraform-axi state list <module> [--full]"
+          : "terraform-axi state resource <module> <address> [--full]",
       help: expect.arrayContaining([
         expect.stringContaining("Required:"),
         expect.stringContaining("--full:"),
@@ -99,12 +102,16 @@ describe("setup contract", () => {
     expect(existsSync(join(original, "dist/bin/terraform-axi.js"))).toBe(false);
 
     const claude = JSON.parse(readFileSync(join(home, ".claude/settings.json"), "utf8"));
-    const claudeCommand = claude.hooks.SessionStart.flatMap((group: { hooks: { command: string }[] }) => group.hooks)[0].command;
+    const claudeCommand = claude.hooks.SessionStart.flatMap((group: { hooks: { command: string }[] }) => group.hooks)[0]
+      .command;
     const codex = JSON.parse(readFileSync(join(home, ".codex/hooks.json"), "utf8"));
     const codexCommand = codex.hooks.SessionStart[0].hooks[0].command;
     for (const command of [claudeCommand, codexCommand]) {
       const executed = spawnSync("/bin/sh", ["-c", command], {
-        env: { ...env, PATH: dirname(process.execPath) }, cwd: tmpdir(), input: "{}", encoding: "utf8",
+        env: { ...env, PATH: dirname(process.execPath) },
+        cwd: tmpdir(),
+        input: "{}",
+        encoding: "utf8",
       });
       expect(executed.status).toBe(0);
       expect(executed.stdout).toContain("terraform_axi");
