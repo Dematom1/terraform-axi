@@ -38,7 +38,7 @@ Drift currently requires a live refresh-only plan; offline drift artifact input 
 
 ## Session memory
 
-Each invocation that exits with a code other than 1 (runtime failure) or 2 (usage error) appends one line to `~/.config/terraform-axi/sessions.jsonl`: the command name, the module name when it is a configured module, a timestamp, and the first 12 hex characters of the SHA-256 of the agent session id. Argument values, paths outside the module registry, environment values, and raw session ids are never stored. The SessionStart hook exports the Claude Code session id through `CLAUDE_ENV_FILE`; without it, lines are unkeyed and do not count toward `last_session`. The home view and SessionStart context show `last_session`, the command and module counts of the most recent other session, and the home view recommends only implemented commands. There is no SessionEnd hook, no transcript reading, and no lock: `last_session` is derived from the log when it is read. The file rotates to `sessions.jsonl.1` above 1 MB, keeping one old generation.
+Ordinary commands, including `setup status`, do not write configuration or session telemetry. Only setup actions change configuration. The home view and SessionStart context can still read `last_session` from existing `~/.config/terraform-axi/sessions.jsonl` history. The SessionStart hook exports the Claude Code session id through `CLAUDE_ENV_FILE`; it does not append telemetry. There is no SessionEnd hook or transcript reading.
 
 `setup hooks` and `setup uninstall` rewrite agent settings files; concurrent setup runs are last-writer-wins.
 

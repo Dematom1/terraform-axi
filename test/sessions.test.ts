@@ -6,13 +6,11 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { invocation } from "../src/cli.js";
 import { lastSession, MAX_BYTES, recordInvocation, sessionKey } from "../src/sessions.js";
 
 const root = join(import.meta.dirname, "..");
@@ -41,13 +39,15 @@ const lines = (path: string) =>
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 
 describe("session memory", () => {
-  it("appends one line per invocation with only command, configured module, hashed session and time", () => {
+  it("does not create telemetry for ordinary commands, help, status, or failures", () => {
     const { log, env } = setup();
     const secret = "AKIAIOSFODNN7EXAMPLE";
     for (const args of [
       ["plan", "infra/prod", "--expect", "destroy=0", `--token=${secret}`],
       ["state", "/elsewhere/module"],
       ["state", "list", "infra/prod"],
+      ["setup", "status"],
+      ["plan", "--help"],
       [],
     ])
       try {
@@ -55,35 +55,14 @@ describe("session memory", () => {
       } catch {
         /* plan and state are not implemented yet, so they fail and are not recorded */
       }
-    const raw = readFileSync(log, "utf8");
-    for (const leaked of ["destroy=0", "--expect", secret, "raw-session-id", "/elsewhere", home])
-      expect(raw).not.toContain(leaked);
-    const s = sessionKey("raw-session-id");
-    expect(s).toMatch(/^[0-9a-f]{12}$/);
-    expect(lines(log).map(({ t, ...rest }) => (expect(typeof t).toBe("number"), rest))).toEqual([
-      { s, cmd: "home", module: null },
-    ]);
-    expect(statSync(log).mode & 0o777).toBe(0o600);
+    expect(existsSync(log)).toBe(false);
+    expect(readdirSync(dirname(log))).toEqual(["config.json"]);
   });
 
-  it("maps argv to the routed command and a configured module only", () => {
-    const modules = ["infra/prod"];
-    expect(
-      invocation(["plan", "infra/prod", "--expect", "destroy=0", "--token=AKIAIOSFODNN7EXAMPLE"], modules),
-    ).toEqual({
-      cmd: "plan",
-      module: "infra/prod",
-    });
-    expect(invocation(["state", "list", "infra/prod"], modules)).toEqual({ cmd: "state", module: "infra/prod" });
-    expect(invocation(["state", "/elsewhere/module"], modules)).toEqual({ cmd: "state", module: null });
-    expect(invocation(["setup", "--module", "infra/prod"], modules)).toEqual({ cmd: "setup", module: null });
-    expect(invocation([], modules)).toEqual({ cmd: "home", module: null });
-    expect(invocation(["plan", "--help"], modules)).toBeUndefined();
-    expect(invocation(["toString"], modules)).toBeUndefined();
-  });
-
-  it("records unkeyed lines without a session id and skips help and unknown commands", () => {
+  it("leaves existing session history unchanged", () => {
     const { log, env } = setup();
+    recordInvocation("plan", "infra/prod", log, sessionKey("old"));
+    const before = readFileSync(log, "utf8");
     cli(["setup", "status"], env);
     cli(["plan", "--help"], env);
     try {
@@ -91,7 +70,7 @@ describe("session memory", () => {
     } catch {
       /* unknown command */
     }
-    expect(lines(log).map((line) => [line.s, line.cmd])).toEqual([[null, "setup"]]);
+    expect(readFileSync(log, "utf8")).toBe(before);
   });
 
   it("groups the most recent other session and ignores the current one, unkeyed and malformed lines", () => {
@@ -155,7 +134,7 @@ describe("session memory", () => {
     expect(readFileSync(`${log}.1`, "utf8")).not.toContain('"t":1}');
   });
 
-  it("keeps every line from concurrent CLI processes", async () => {
+  it("does not write telemetry from concurrent status commands", async () => {
     const { log, env } = setup();
     const { execFile } = await import("node:child_process");
     await Promise.all(
@@ -172,12 +151,12 @@ describe("session memory", () => {
           ),
       ),
     );
-    expect(new Set(lines(log).map((line) => line.s)).size).toBe(10);
+    expect(existsSync(log)).toBe(false);
   });
 
   it("shows the previous session's commands in the home view and recommends an implemented command", () => {
     const { log, env } = setup(["infra/dev", "infra/prod"]);
-    cli(["setup", "status"], { ...env, TERRAFORM_AXI_SESSION: "one" });
+    recordInvocation("setup", null, log, sessionKey("one"));
     try {
       cli(["plan", "--bogus"], { ...env, TERRAFORM_AXI_SESSION: "one" });
     } catch {
@@ -186,7 +165,7 @@ describe("session memory", () => {
     const output = cli([], { ...env, TERRAFORM_AXI_SESSION: "two" });
     expect(output).toMatch(/last_session:\n\s+commands:\n\s+setup: 1\n/);
     expect(output).toContain("next_action: terraform-axi setup status");
-    expect(lines(log).map((line) => line.cmd)).toEqual(["setup", "home"]);
+    expect(lines(log).map((line) => line.cmd)).toEqual(["setup"]);
   });
 
   it("suggests registering a module when none is configured", () => {
