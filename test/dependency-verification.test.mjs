@@ -41,7 +41,10 @@ function fixtureAPI({ pull = pr, changed = files, runs = [run] } = {}) {
       const page = Number(new globalThis.URLSearchParams(path.split("?")[1]).get("page"));
       return changed.slice((page - 1) * 100, page * 100);
     }
-    if (path.includes("/runs?")) return { workflow_runs: runs };
+    if (path.includes("/runs?")) {
+      const page = Number(new globalThis.URLSearchParams(path.split("?")[1]).get("page"));
+      return { workflow_runs: runs.slice((page - 1) * 100, page * 100) };
+    }
     if (path.endsWith("/actions/workflows/dependency-verification.yml")) {
       return { id: workflowId, path: run.path, state: "active" };
     }
@@ -114,11 +117,17 @@ describe("same-head workflow verification", () => {
     },
   );
 
-  it("does not reuse an earlier successful run over a new failing or pending run", async () => {
-    const failed = { ...run, id: 2, conclusion: "failure" };
-    await expect(verify(fixtureAPI({ runs: [run, failed] }))).rejects.toThrow("failed");
-    const pending = { ...run, id: 2, status: "in_progress", conclusion: null };
-    expect(verificationState([run, pending], context)).toBe("pending");
+  it("does not reuse an earlier successful run over a newer failing or pending run", async () => {
+    const older = { ...run, id: 1 };
+    const newerFailed = { ...run, id: 200, conclusion: "failure" };
+    const laterPageRuns = [...Array.from({ length: 100 }, (_, id) => ({ ...run, id: id + 10 })), newerFailed];
+    await expect(verify(fixtureAPI({ runs: [older, ...laterPageRuns] }))).rejects.toThrow("failed");
+
+    const newerPending = { ...run, id: 200, status: "in_progress", conclusion: null };
+    expect(verificationState([older, newerPending], context)).toBe("pending");
+    await expect(verify(fixtureAPI({ runs: [older, ...laterPageRuns.slice(0, 100), newerPending] }))).rejects.toThrow(
+      "Timed out",
+    );
   });
 
   it("waits for an in-flight verification to complete", async () => {

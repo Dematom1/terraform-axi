@@ -74,10 +74,16 @@ export async function verifyDependencyPR({ api, repository, prNumber, sha, sleep
     throw new Error("Dependency verification workflow is missing or inactive");
   }
   for (let attempt = 0; attempt < attempts; attempt++) {
-    const result = await api(
-      `repos/${repository}/actions/workflows/${workflow.id}/runs?event=pull_request&head_sha=${sha}&per_page=100`,
-    );
-    const state = verificationState(result.workflow_runs, {
+    const runs = [];
+    for (let page = 1; page <= 30; page++) {
+      const result = await api(
+        `repos/${repository}/actions/workflows/${workflow.id}/runs?event=pull_request&head_sha=${sha}&per_page=100&page=${page}`,
+      );
+      runs.push(...result.workflow_runs);
+      if (result.workflow_runs.length < 100) break;
+      if (page === 30) throw new Error("Workflow run pagination exceeded 3000 results");
+    }
+    const state = verificationState(runs, {
       sha,
       repository,
       headRef: pr.head.ref,
