@@ -25,7 +25,7 @@ export function assertDependencyFiles(files, expectedCount) {
   if (
     !Number.isInteger(expectedCount) ||
     expectedCount < 1 ||
-    expectedCount > 3000 ||
+    expectedCount > allowedFiles.size ||
     files.length !== expectedCount ||
     !files.every(
       (file) =>
@@ -62,11 +62,8 @@ export async function verifyDependencyPR({ api, repository, prNumber, sha, sleep
   const pr = await api(prPath);
   assertDependencyPR(pr, repository, sha);
   const files = [];
-  for (let page = 1; page <= 30; page++) {
-    const batch = await api(`${prPath}/files?per_page=100&page=${page}`);
-    files.push(...batch);
-    if (batch.length < 100) break;
-  }
+  const batch = await api(`${prPath}/files?per_page=100&page=1`);
+  files.push(...batch);
   assertDependencyFiles(files, pr.changed_files);
 
   const workflow = await api(`repos/${repository}/actions/workflows/dependency-verification.yml`);
@@ -75,13 +72,12 @@ export async function verifyDependencyPR({ api, repository, prNumber, sha, sleep
   }
   for (let attempt = 0; attempt < attempts; attempt++) {
     const runs = [];
-    for (let page = 1; page <= 30; page++) {
+    for (let page = 1; ; page++) {
       const result = await api(
         `repos/${repository}/actions/workflows/${workflow.id}/runs?event=pull_request&head_sha=${sha}&per_page=100&page=${page}`,
       );
       runs.push(...result.workflow_runs);
       if (result.workflow_runs.length < 100) break;
-      if (page === 30) throw new Error("Workflow run pagination exceeded 3000 results");
     }
     const state = verificationState(runs, {
       sha,

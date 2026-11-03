@@ -130,6 +130,15 @@ describe("same-head workflow verification", () => {
     );
   });
 
+  it("checks beyond 30 full pages before accepting an older success", async () => {
+    const runs = [...Array.from({ length: 3000 }, (_, id) => ({ ...run, id: id + 1 })), {
+      ...run,
+      id: 4000,
+      conclusion: "failure",
+    }];
+    await expect(verify(fixtureAPI({ runs }))).rejects.toThrow("failed");
+  });
+
   it("waits for an in-flight verification to complete", async () => {
     let completed = false;
     const baseAPI = fixtureAPI();
@@ -163,7 +172,7 @@ describe("same-head workflow verification", () => {
     ).rejects.toThrow("triggering head SHA");
   });
 
-  it("reads every page before accepting files; a forbidden file on page two fails", async () => {
+  it("rejects incomplete or oversized dependency-file lists", async () => {
     const changed = Array.from({ length: 100 }, () => ({ filename: "package.json" }));
     changed.push({ filename: "src/cli.ts" });
     await expect(verify(fixtureAPI({ pull: { ...pr, changed_files: changed.length }, changed }))).rejects.toThrow(
