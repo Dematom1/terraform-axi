@@ -47,7 +47,7 @@ describe("terraform-axi scaffold", () => {
   });
 
   it.each(["no-mistakes-required", "guard-generated-files"])(
-    "%s gates its release check on both commit identities",
+    "%s gates its release check on verified release-bot commits",
     (workflowName) => {
       const workflowPath = `.github/workflows/${workflowName}.yml`;
       const parseWorkflow = `
@@ -94,12 +94,42 @@ describe("terraform-axi scaffold", () => {
           },
         }) === "true";
       expect(isBotOnly("app[bot]\tapp[bot]\ttrue\n")).toBe(true);
+      // GitHub's signed release-please commits use web-flow as committer.
+      expect(isBotOnly("app[bot]\tweb-flow\ttrue\n")).toBe(true);
+      expect(isBotOnly("app[bot]\tweb-flow\tfalse\n")).toBe(false);
+      expect(isBotOnly("human\tweb-flow\ttrue\n")).toBe(false);
+      expect(isBotOnly("app[bot]\thuman\ttrue\n")).toBe(false);
+      expect(isBotOnly("app[bot]\tweb-flow\ttrue\nhuman\tweb-flow\ttrue\n")).toBe(false);
+      expect(isBotOnly("app[bot]\tweb-flow\ttrue\n", { HEAD_REF: "feature" })).toBe(false);
+      expect(isBotOnly("")).toBe(false);
       expect(isBotOnly("human\tapp[bot]\ttrue\n")).toBe(false);
       expect(isBotOnly("app[bot]\tapp[bot]\tfalse\n")).toBe(false);
       expect(isBotOnly("app[bot]\tapp[bot]\ttrue\n", { HEAD_REPOSITORY: "fork/project" })).toBe(false);
       expect(isBotOnly("app[bot]\tapp[bot]\ttrue\n", { RELEASE_APP_BOT_LOGIN: "" })).toBe(false);
     },
   );
+
+  it("excludes generated changelogs from formatting without exempting authored Markdown", () => {
+    const directory = mkdtempSync(join(tmpdir(), "terraform-axi-format-"));
+    const prettier = join(root, "node_modules/prettier/bin/prettier.cjs");
+    const ignore = join(directory, ".prettierignore");
+    writeFileSync(ignore, readFileSync(join(root, ".prettierignore")));
+    const check = (name: string) => {
+      const path = join(directory, name);
+      writeFileSync(path, "# Heading\n\n\n*   generated entry\n");
+      return spawnSync(process.execPath, [prettier, "--check", "--ignore-path", ignore, path], {
+        cwd: directory,
+        encoding: "utf8",
+      });
+    };
+    try {
+      const changelog = check("CHANGELOG.md");
+      expect(changelog.status, changelog.stderr).toBe(0);
+      expect(check("README.md").status).toBe(1);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 
   it("keeps saved wrapper values out of SessionStart context", () => {
     const home = mkdtempSync(join(tmpdir(), "terraform-axi-context-"));
