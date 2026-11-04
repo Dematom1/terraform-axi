@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.1...terraform-axi-v0.1.2) (2026-11-04)
+
+
+### Bug Fixes
+
+* **cli:** harden setup hooks and stop invocation telemetry ([#23](https://github.com/Dematom1/terraform-axi/issues/23)) ([6ed9f50](https://github.com/Dematom1/terraform-axi/commit/6ed9f50ec619df1aa5b3cd999c5df32afbfb0e11))
+
 ## [0.1.1](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.0...terraform-axi-v0.1.1) (2026-11-03)
 
 
