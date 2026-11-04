@@ -18,9 +18,9 @@ concurrency:
 jobs:
   verify:
     if: github.event.pull_request.user.login == 'renovate[bot]'
-    uses: Dematom1/oss-workflows/.github/workflows/dependency-verify.yml@0df7f9e0c07bf6007017b3de55eb0ad6ebd46977
+    uses: Dematom1/oss-workflows/.github/workflows/dependency-verify.yml@4f46e76caa8be8b84ce935e06c1fe76783f7f81d
     with:
-      shared-script-ref: 0df7f9e0c07bf6007017b3de55eb0ad6ebd46977
+      shared-script-ref: 4f46e76caa8be8b84ce935e06c1fe76783f7f81d
       install-command: npm ci
       build-command: npm run build
       test-command: npm test
