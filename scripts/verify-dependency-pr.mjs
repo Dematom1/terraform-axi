@@ -45,7 +45,7 @@ export function verificationState(runs, { sha, repository, headRef, workflowId }
     .filter(
       (run) =>
         run.workflow_id === workflowId &&
-        run.path === workflowPath &&
+        run.path?.split("@", 1)[0] === workflowPath &&
         run.event === "pull_request" &&
         run.head_sha === sha &&
         run.head_repository?.full_name === repository &&

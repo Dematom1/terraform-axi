@@ -1,3 +1,12 @@
+import { execFile } from "node:child_process";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { delimiter, dirname, join } from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
 import {
   assertDependencyFiles,
@@ -95,11 +104,18 @@ describe("same-head workflow verification", () => {
     await expect(verify(fixtureAPI())).resolves.toBeUndefined();
   });
 
+  it.each([headRef, sha, "refs/pull/123/merge"])("accepts GitHub's ref-suffixed run path: %s", async (ref) => {
+    const suffixed = { ...run, path: `${run.path}@${ref}` };
+    expect(verificationState([suffixed], context)).toBe("passed");
+    await expect(verify(fixtureAPI({ runs: [suffixed] }))).resolves.toBeUndefined();
+  });
+
   it.each([
     { head_sha: "b".repeat(40) },
     { event: "push" },
     { event: "workflow_dispatch" },
     { path: ".github/workflows/ci.yml" },
+    { path: ".github/workflows/ci.yml@main" },
     { workflow_id: 999 },
     { head_repository: { full_name: "attacker/terraform-axi" } },
     { head_branch: "unrelated-branch" },
@@ -199,5 +215,77 @@ describe("same-head workflow verification", () => {
         return path.endsWith("/dependency-verification.yml") ? { ...result, state: "disabled_manually" } : result;
       }),
     ).rejects.toThrow("missing or inactive");
+  });
+});
+
+describe("required workflow dependency gate", () => {
+  it("runs the trusted verifier only for Renovate and fails the job on rejected dependencies or verification", async () => {
+    const root = fileURLToPath(new globalThis.URL("../", import.meta.url));
+    const job = yaml.load(readFileSync(join(root, ".github/workflows/no-mistakes-required.yml"), "utf8")).jobs.check;
+    const step = job.steps.find(
+      (candidate) => candidate.name === "Require dependency verification on the same Renovate head SHA",
+    );
+    expect(step).toBeDefined();
+    for (const author of ["renovate[bot]", "human", "app[bot]", "github-actions[bot]", "dependabot[bot]"]) {
+      const enabled = Function(
+        "github",
+        `return (${job.if ?? "true"}) && (${step.if ?? "true"})`,
+      )({
+        event: { pull_request: { user: { login: author } } },
+      });
+      expect(enabled, author).toBe(author === "renovate[bot]");
+    }
+
+    const directory = mkdtempSync(join(tmpdir(), "dependency-workflow-"));
+    let scenario = { pull: pr, changed: files, runs: [run] };
+    const server = createServer((request, response) => {
+      fixtureAPI(scenario)(request.url.slice(1)).then(
+        (result) => {
+          response.writeHead(200, { "Content-Type": "application/json", Connection: "close" });
+          response.end(JSON.stringify(result));
+        },
+        () => {
+          response.writeHead(500);
+          response.end();
+        },
+      );
+    });
+    try {
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      mkdirSync(join(directory, "trusted/scripts"), { recursive: true });
+      copyFileSync(
+        join(root, "scripts/verify-dependency-pr.mjs"),
+        join(directory, "trusted/scripts/verify-dependency-pr.mjs"),
+      );
+      const event = join(directory, "event.json");
+      writeFileSync(event, JSON.stringify({ pull_request: { number: prNumber, head: { sha } } }));
+      const execute = () =>
+        promisify(execFile)("/bin/bash", ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", step.run], {
+          cwd: directory,
+          timeout: 10000,
+          env: {
+            PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH}`,
+            HOME: directory,
+            GITHUB_EVENT_PATH: event,
+            GITHUB_REPOSITORY: repository,
+            GITHUB_API_URL: `http://127.0.0.1:${server.address().port}`,
+            GH_TOKEN: "fixture-token",
+          },
+        });
+      await expect(execute()).resolves.toMatchObject({
+        stdout: "Renovate dependency verification passed on this exact head SHA.\n",
+      });
+      scenario = { pull: { ...pr, changed_files: 1 }, changed: [{ filename: "src/cli.ts" }], runs: [run] };
+      await expect(execute()).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining("only package.json") });
+      scenario = { pull: pr, changed: files, runs: [{ ...run, conclusion: "failure" }] };
+      await expect(execute()).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining("Dependency verification failed"),
+      });
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
