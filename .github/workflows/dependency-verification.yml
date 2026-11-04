@@ -1,0 +1,31 @@
+name: Dependency verification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+
+# Only the shared reporting job can write a PR comment. Dependency scripts
+# run in read-only jobs without secrets or persisted checkout credentials.
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dependency-verification-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: github.event.pull_request.user.login == 'renovate[bot]'
+    uses: Dematom1/oss-workflows/.github/workflows/dependency-verify.yml@0df7f9e0c07bf6007017b3de55eb0ad6ebd46977
+    with:
+      shared-script-ref: 0df7f9e0c07bf6007017b3de55eb0ad6ebd46977
+      install-command: npm ci
+      build-command: npm run build
+      test-command: npm test
+      smoke-command: npm run test:real
+      lockfile-path: package-lock.json
+      node-version: "22"
+      bisect-max-rounds: 8
+      bisect-timeout-minutes: 20
