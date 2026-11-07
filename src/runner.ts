@@ -128,8 +128,7 @@ function classify(error: unknown): "not found" | "not executable" | "timeout" | 
   if ("code" in record && record.code === "EACCES") return "not executable";
   if (
     ("code" in record && record.code === "ETIMEDOUT") ||
-    ("killed" in record && record.killed === true) ||
-    ("signal" in record && record.signal === "SIGKILL")
+    ("killed" in record && record.killed === true)
   )
     return "timeout";
   return "failed";
