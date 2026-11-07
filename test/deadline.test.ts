@@ -19,7 +19,7 @@ describe("process-group deadlines", () => {
     expect(result).toEqual({ stdout: "�", stderr: "�" });
   });
 
-  it("kills grandchildren and settles at the timeout", async () => {
+  it.skipIf(process.platform === "win32")("kills grandchildren and settles at the timeout", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tfaxi-deadline-"));
     dirs.push(dir);
     const survived = join(dir, "survived");
@@ -36,5 +36,11 @@ describe("process-group deadlines", () => {
     expect(Date.now() - started).toBeLessThan(2500);
     await new Promise((resolve) => setTimeout(resolve, 1500));
     expect(() => readFileSync(survived)).toThrow();
+  });
+
+  it.skipIf(process.platform !== "win32")("settles direct-child timeout on Windows", async () => {
+    await expect(
+      execute(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { timeout: 100, maxBuffer: 1024 }),
+    ).rejects.toMatchObject({ killed: true, signal: "SIGKILL" });
   });
 });
