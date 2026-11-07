@@ -20,10 +20,11 @@ export function execute(
       windowsHide: true,
       detached: process.platform !== "win32",
     });
-    let stdout = "";
-    let stderr = "";
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
     let stdoutBytes = 0;
     let stderrBytes = 0;
+    const output = (chunks: Buffer[]) => Buffer.concat(chunks).toString("utf8");
     let settled = false;
     let timedOut = false;
     const cleanup = () => {
@@ -36,8 +37,17 @@ export function execute(
       settled = true;
       cleanup();
       if (error) reject(error);
-      else if (code === 0) resolve({ stdout, stderr });
-      else reject(Object.assign(new Error("command failed"), { code, signal, killed: timedOut, stdout, stderr }));
+      else if (code === 0) resolve({ stdout: output(stdout), stderr: output(stderr) });
+      else
+        reject(
+          Object.assign(new Error("command failed"), {
+            code,
+            signal,
+            killed: timedOut,
+            stdout: output(stdout),
+            stderr: output(stderr),
+          }),
+        );
     };
     const kill = () => {
       try {
@@ -60,25 +70,43 @@ export function execute(
       timedOut = true;
       kill();
       finish(
-        Object.assign(new Error("command timed out"), { killed: true, signal: "SIGKILL", code: null, stdout, stderr }),
+        Object.assign(new Error("command timed out"), {
+          killed: true,
+          signal: "SIGKILL",
+          code: null,
+          stdout: output(stdout),
+          stderr: output(stderr),
+        }),
       );
     }, options.timeout);
     process.once("SIGINT", onSigint);
     process.once("SIGTERM", onSigterm);
-    child.stdout?.setEncoding("utf8").on("data", (chunk: string) => {
-      stdout += chunk;
-      stdoutBytes += Buffer.byteLength(chunk);
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout.push(chunk);
+      stdoutBytes += chunk.length;
       if (stdoutBytes > options.maxBuffer) {
         kill();
-        finish(Object.assign(new Error("output limit"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER", stdout, stderr }));
+        finish(
+          Object.assign(new Error("output limit"), {
+            code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+            stdout: output(stdout),
+            stderr: output(stderr),
+          }),
+        );
       }
     });
-    child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
-      stderr += chunk;
-      stderrBytes += Buffer.byteLength(chunk);
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr.push(chunk);
+      stderrBytes += chunk.length;
       if (stderrBytes > options.maxBuffer) {
         kill();
-        finish(Object.assign(new Error("output limit"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER", stdout, stderr }));
+        finish(
+          Object.assign(new Error("output limit"), {
+            code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+            stdout: output(stdout),
+            stderr: output(stderr),
+          }),
+        );
       }
     });
     child.once("error", (error) => finish(error));
