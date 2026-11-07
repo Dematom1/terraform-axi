@@ -1,13 +1,10 @@
-import { execFile } from "node:child_process";
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
-import { promisify } from "node:util";
 import { parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { ReportError, UsageError } from "../errors.js";
-import { run } from "../runner.js";
+import { execute, run } from "../runner.js";
 
-const execute = promisify(execFile);
 const TIMEOUT_MS = 60_000;
 export const lintUsage = "terraform-axi lint <module> [--binary terraform|tofu]";
 type Finding = { file: string | null; line: number | null; rule: string; severity: string; message: string };
@@ -142,7 +139,6 @@ export async function lint(args: string[], config: Config): Promise<Record<strin
       ({ stdout } = await execute("tflint", ["--format=json"], {
         cwd: directory,
         timeout: TIMEOUT_MS,
-        killSignal: "SIGKILL",
         maxBuffer: 4 * 1024 * 1024,
       }));
     } catch (error) {
