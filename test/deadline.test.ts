@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -40,11 +40,11 @@ describe("process-group deadlines", () => {
   it.skipIf(process.platform === "win32")("kills grandchildren and settles at the timeout", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tfaxi-deadline-"));
     dirs.push(dir);
-    const pidFile = join(dir, "pid");
+    const sentinel = join(dir, "survived");
     const stub = join(dir, "stub.mjs");
     writeFileSync(
       stub,
-      `import { spawn } from "node:child_process";\nimport { writeFileSync } from "node:fs";\nconst child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" });\nwriteFileSync(${JSON.stringify(pidFile)}, String(child.pid));\nsetInterval(() => {}, 1000);\n`,
+      `import { spawn } from "node:child_process";\nconst child = spawn(process.execPath, ["-e", ${JSON.stringify(`setTimeout(() => { require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'alive'); process.exit(0); }, 1500)`)}], { stdio: "inherit" });\nsetInterval(() => {}, 1000);\n`,
     );
     const started = Date.now();
     await expect(execute(process.execPath, [stub], { timeout: 1000, maxBuffer: 1024 })).rejects.toMatchObject({
@@ -52,10 +52,8 @@ describe("process-group deadlines", () => {
       signal: "SIGKILL",
     });
     expect(Date.now() - started).toBeLessThan(2500);
-    const pid = Number(readFileSync(pidFile, "utf8"));
-    expect(pid).toBeGreaterThan(0);
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(existsSync(sentinel)).toBe(false);
   });
 
   it.skipIf(process.platform !== "win32")("settles direct-child timeout on Windows", async () => {
