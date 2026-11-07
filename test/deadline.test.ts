@@ -13,7 +13,7 @@ describe("process-group deadlines", () => {
   it("counts raw bytes independently for each output stream", async () => {
     const result = await execute(
       process.execPath,
-      ["-e", 'process.stdout.write(Buffer.from([0xff])); process.stderr.write(Buffer.from([0xfe]))'],
+      ["-e", "process.stdout.write(Buffer.from([0xff])); process.stderr.write(Buffer.from([0xfe]))"],
       { timeout: 1000, maxBuffer: 1 },
     );
     expect(result).toEqual({ stdout: "�", stderr: "�" });
