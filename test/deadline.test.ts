@@ -19,14 +19,32 @@ describe("process-group deadlines", () => {
     expect(result).toEqual({ stdout: "�", stderr: "�" });
   });
 
+  it.each(["stdout", "stderr"])("rejects when %s exceeds maxBuffer", async (stream) => {
+    const write = stream === "stdout" ? "process.stdout.write('ab')" : "process.stderr.write('ab')";
+    await expect(
+      execute(process.execPath, ["-e", `${write}; setInterval(() => {}, 1000)`], {
+        timeout: 1000,
+        maxBuffer: 1,
+      }),
+    ).rejects.toMatchObject({ code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" });
+  });
+
+  it("rejects with ENOENT for a missing executable", async () => {
+    await expect(execute("terraform-axi-no-such-binary", [], { timeout: 1000, maxBuffer: 1024 })).rejects.toMatchObject(
+      {
+        code: "ENOENT",
+      },
+    );
+  });
+
   it.skipIf(process.platform === "win32")("kills grandchildren and settles at the timeout", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tfaxi-deadline-"));
     dirs.push(dir);
-    const survived = join(dir, "survived");
+    const pidFile = join(dir, "pid");
     const stub = join(dir, "stub.mjs");
     writeFileSync(
       stub,
-      `import { spawn } from "node:child_process";\nspawn(process.execPath, ["-e", 'setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(survived)}, "yes"), 2200)'], { stdio: "inherit" });\nsetInterval(() => {}, 1000);\n`,
+      `import { spawn } from "node:child_process";\nimport { writeFileSync } from "node:fs";\nconst child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" });\nwriteFileSync(${JSON.stringify(pidFile)}, String(child.pid));\nsetInterval(() => {}, 1000);\n`,
     );
     const started = Date.now();
     await expect(execute(process.execPath, [stub], { timeout: 1000, maxBuffer: 1024 })).rejects.toMatchObject({
@@ -34,8 +52,10 @@ describe("process-group deadlines", () => {
       signal: "SIGKILL",
     });
     expect(Date.now() - started).toBeLessThan(2500);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    expect(() => readFileSync(survived)).toThrow();
+    const pid = Number(readFileSync(pidFile, "utf8"));
+    expect(pid).toBeGreaterThan(0);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
   });
 
   it.skipIf(process.platform !== "win32")("settles direct-child timeout on Windows", async () => {
