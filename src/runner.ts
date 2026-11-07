@@ -1,12 +1,90 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
 import { CliError } from "./errors.js";
 import { diagnosticMetadata, parsePlanEvents } from "./plan/events.js";
 import type { Config } from "./config.js";
 
-const execute = promisify(execFile);
+type ExecOptions = { timeout: number; maxBuffer: number; env?: NodeJS.ProcessEnv; cwd?: string };
+
+export function execute(
+  file: string,
+  args: string[],
+  options: ExecOptions,
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      detached: process.platform !== "win32",
+    });
+    let stdout = "";
+    let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let settled = false;
+    let timedOut = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      process.removeListener("SIGINT", onSigint);
+      process.removeListener("SIGTERM", onSigterm);
+    };
+    const finish = (error?: unknown, code?: number | null, signal?: NodeJS.Signals | null) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else if (code === 0) resolve({ stdout, stderr });
+      else reject(Object.assign(new Error("command failed"), { code, signal, killed: timedOut, stdout, stderr }));
+    };
+    const kill = () => {
+      try {
+        if (process.platform === "win32") child.kill("SIGKILL");
+        else if (child.pid) process.kill(-child.pid, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      child.unref();
+    };
+    const interrupt = (signal: "SIGINT" | "SIGTERM") => {
+      kill();
+      queueMicrotask(() => process.exit(signal === "SIGINT" ? 130 : 143));
+    };
+    const onSigint = () => interrupt("SIGINT");
+    const onSigterm = () => interrupt("SIGTERM");
+    const timer = setTimeout(() => {
+      timedOut = true;
+      kill();
+      finish(
+        Object.assign(new Error("command timed out"), { killed: true, signal: "SIGKILL", code: null, stdout, stderr }),
+      );
+    }, options.timeout);
+    process.once("SIGINT", onSigint);
+    process.once("SIGTERM", onSigterm);
+    child.stdout?.setEncoding("utf8").on("data", (chunk: string) => {
+      stdout += chunk;
+      stdoutBytes += Buffer.byteLength(chunk);
+      if (stdoutBytes > options.maxBuffer) {
+        kill();
+        finish(Object.assign(new Error("output limit"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER", stdout, stderr }));
+      }
+    });
+    child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
+      stderr += chunk;
+      stderrBytes += Buffer.byteLength(chunk);
+      if (stderrBytes > options.maxBuffer) {
+        kill();
+        finish(Object.assign(new Error("output limit"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER", stdout, stderr }));
+      }
+    });
+    child.once("error", (error) => finish(error));
+    child.once("close", (code, signal) => finish(undefined, code, signal));
+  });
+}
 const versionArgs = ["version", "-json"];
 // TF_CLI_ARGS* could append arbitrary flags, such as -out=, writing a plan with secrets.
 const runEnv = () => ({
@@ -78,14 +156,14 @@ async function resolveBinary(
   let terraformError: unknown;
   try {
     assertAllowed(versionArgs);
-    await execute("terraform", versionArgs, { timeout: 2_000, killSignal: "SIGKILL", env: runEnv() });
+    await execute("terraform", versionArgs, { timeout: 2_000, maxBuffer: 4 * 1024 * 1024, env: runEnv() });
     return { binary: "terraform" };
   } catch (error) {
     terraformError = error;
   }
   try {
     assertAllowed(versionArgs);
-    await execute("tofu", versionArgs, { timeout: 2_000, killSignal: "SIGKILL", env: runEnv() });
+    await execute("tofu", versionArgs, { timeout: 2_000, maxBuffer: 4 * 1024 * 1024, env: runEnv() });
     return { binary: "tofu", fallbackReason: `Terraform probe failed: ${classify(terraformError)}` };
   } catch (error) {
     const tofuFailure = classify(error);
@@ -140,7 +218,6 @@ export async function run(
   }
   const execOptions = {
     timeout: timeout ?? 10_000,
-    killSignal: "SIGKILL" as const,
     maxBuffer: options.maxBuffer ?? 4 * 1024 * 1024,
     env: runEnv(),
   };
