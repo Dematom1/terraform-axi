@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.2...terraform-axi-v0.1.3) (2026-11-07)
+
+
+### Bug Fixes
+
+* **runner:** kill subprocess groups at deadline ([#27](https://github.com/Dematom1/terraform-axi/issues/27)) ([7400f09](https://github.com/Dematom1/terraform-axi/commit/7400f09e15c6d7e4c0843409c3c9afa9b39d4952))
+
 ## [0.1.2](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.1...terraform-axi-v0.1.2) (2026-11-04)
 
 
