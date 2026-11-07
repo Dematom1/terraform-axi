@@ -126,10 +126,7 @@ function classify(error: unknown): "not found" | "not executable" | "timeout" | 
   if ("code" in record && record.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return "output limit exceeded";
   if ("code" in record && record.code === "ENOENT") return "not found";
   if ("code" in record && record.code === "EACCES") return "not executable";
-  if (
-    ("code" in record && record.code === "ETIMEDOUT") ||
-    ("killed" in record && record.killed === true)
-  )
+  if (("code" in record && record.code === "ETIMEDOUT") || ("killed" in record && record.killed === true))
     return "timeout";
   return "failed";
 }
