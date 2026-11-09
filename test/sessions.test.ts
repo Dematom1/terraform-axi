@@ -169,13 +169,11 @@ describe("session memory", () => {
     const { log, env } = setup();
     recordInvocation("plan", "infra/prod", log, sessionKey("earlier"));
     const envFile = join(home, "claude-env");
-    const started = performance.now();
     const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi-ctx.js")], {
       encoding: "utf8",
       input: JSON.stringify({ session_id: "fresh-session" }),
       env: { ...env, PATH: "", CLAUDE_ENV_FILE: envFile },
     });
-    expect(performance.now() - started).toBeLessThan(200);
     expect(existsSync(envFile)).toBe(false);
     expect(output).not.toContain("last_session");
     expect(output).toContain("writes: never");

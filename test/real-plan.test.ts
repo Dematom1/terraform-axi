@@ -83,7 +83,7 @@ describe.each(binaries)("plan with real %s on a throwaway local-backend module",
 
   it("summarizes risk, passes a matching --expect, and leaves the module untouched", () => {
     configure({ binary, modules: [] });
-    const { status, report, stdout } = tfaxi(["plan", module, "--expect", "add=2,change=1,destroy=2"]);
+    const { status, report, stdout } = tfaxi(["plan", module, "--expect", "add=2,change=1,destroy=2", "--full"]);
     expect(status).toBe(0);
     expect(report).toMatchObject({
       status: "planned",
