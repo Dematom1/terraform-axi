@@ -46,8 +46,11 @@ describe("state command", () => {
     const ordinary = JSON.stringify(await invoke("resource", "mod", "test_resource.example"));
     expect(ordinary).toContain("x".repeat(200));
     expect(ordinary).not.toContain("x".repeat(201));
+    expect(ordinary).toContain("250 chars total");
+    expect(ordinary).toContain("terraform-axi state resource mod test_resource.example --full");
     const full = JSON.stringify(await invoke("resource", "mod", "test_resource.example", "--full"));
     expect(full).toContain(longValue);
+    expect(full).not.toContain('"help"');
   });
 
   it("bounds lists, retains total, enriches full types, and reports empty state", async () => {
@@ -58,6 +61,10 @@ describe("state command", () => {
     const output = await invoke("list", "mod");
     expect(output.total).toBe(105);
     expect(output.resources as unknown[]).toHaveLength(100);
+    expect(output.help).toEqual([
+      "Run `terraform-axi state resource mod '<address>'` to inspect a resource",
+      "Run `terraform-axi state list mod --full` to list all 105 resources",
+    ]);
     expect(runOperation).toHaveBeenLastCalledWith(config, "mod", "state_list");
     runOperation
       .mockResolvedValueOnce(result(addresses))
@@ -70,7 +77,7 @@ describe("state command", () => {
       );
     const fullOutput = await invoke("list", "mod", "--full");
     expect(fullOutput.total).toBe(105);
-    expect(fullOutput.resources as unknown[]).toHaveLength(100);
+    expect(fullOutput.resources as unknown[]).toHaveLength(105);
     runOperation
       .mockResolvedValueOnce(result("terraform_data.secret\n"))
       .mockResolvedValueOnce(result(state([terraformData("terraform_data.secret", "hunter2")])));

@@ -21,7 +21,7 @@ npm install -g terraform-axi
 terraform-axi setup --binary auto --wrapper 'just tf {module}' --module infra/prod
 terraform-axi setup --remove-module infra/prod
 terraform-axi setup status
-terraform-axi setup hooks      # install user-level SessionStart hooks for supported agents
+terraform-axi setup hooks      # install user-level session start/end integrations
 terraform-axi setup uninstall  # remove terraform-axi-managed user-level hooks only
 ```
 
@@ -39,7 +39,11 @@ Drift currently requires a live refresh-only plan; offline drift artifact input 
 
 ## Session memory
 
-Ordinary commands, including `setup status`, do not write configuration or session telemetry. Only setup actions change configuration. The home view and SessionStart context can still read `last_session` from existing `~/.config/terraform-axi/sessions.jsonl` history. The SessionStart hook exports the Claude Code session id through `CLAUDE_ENV_FILE`; it does not append telemetry. There is no SessionEnd hook or transcript reading.
+Ordinary commands and SessionStart context, including `setup status`, do not write configuration or session telemetry. Setup actions change configuration. `setup hooks` opts into SessionEnd capture for Claude Code and Codex, and session-idle/deleted capture for OpenCode 1 and 2. Each completed session has an atomic, mode-0600 summary under `~/.config/terraform-axi/captures/`. Separate files prevent concurrent sessions from overwriting each other.
+
+Capture reads at most the last 1 MB of a supplied transcript. It retains only recognized terraform-axi command counts, a count of files touched by Write/Edit tools, transcript byte counts, the directory, a hashed session key, and the completion time. It never stores transcript text, arguments, credentials, or file names. OpenCode captures command counts from tool events instead. The next session in the same directory sees this summary as `last_session`. Unsupported transcript records are ignored; counts describe recognized records in the scanned tail, not a complete audit log.
+
+Ambient context shows only registered modules containing the current directory. New `setup --module` registrations retain the module label and store its absolute directory separately. Re-register older relative registrations from their original working directory to enable directory-scoped context. SessionStart no longer writes `CLAUDE_ENV_FILE`. The home view can still read legacy `sessions.jsonl` history, but ambient context uses only directory-scoped captures.
 
 `setup hooks` and `setup uninstall` rewrite agent settings files; concurrent setup runs are last-writer-wins. Stored hook commands use absolute paths so they work after npx exits; after moving the installation, run `setup hooks` again to refresh every agent integration.
 
@@ -59,11 +63,15 @@ Known SDK limitation: `axi-sdk-js` 0.1.13 does not honor `CLAUDE_CONFIG_DIR`. Ho
 | `terraform-axi lint <module> [--binary terraform\|tofu]`                                   | Read-only fmt check, initialized validate, and optional tflint; structured findings and count                         |
 | `terraform-axi doctor [module] [--offline]`                                                  | Backend, credential and unauthenticated reachability diagnostics; no init or state access                              |
 | `terraform-axi doctor --explain TEXT` or `--explain -`                                      | Explain a common S3 or Backblaze B2 diagnostic                                                                         |
-| `terraform-axi state list <module> [--full]`                                                | List resource addresses; `--full` reads state JSON to infer types                                                       |
+| `terraform-axi state list <module> [--full]`                                                | List resource addresses; `--full` returns every resource and reads state JSON to resolve types                         |
 | `terraform-axi state resource <module> <address> [--full]`                                 | Inspect one resource with secrets redacted; strings truncate at 200 characters unless `--full`; `terraform_data` attributes except `id`, `arn`, and `name` are force-redacted |
 | `terraform-axi setup [--binary ...] [--wrapper ...] [--module name] [--remove-module name]` | Configure binary, wrapper, and registered modules                                                                      |
 | `terraform-axi setup status`                                                                | Inspect current settings and managed hooks                                                                             |
-| `terraform-axi setup hooks` / `setup uninstall`                                             | Install or remove terraform-axi-managed user-level SessionStart hooks                                                  |
+| `terraform-axi setup hooks` / `setup uninstall`                                             | Install or remove terraform-axi-managed user-level session start/end integrations                                   |
+
+Plan lists default to `address`, `action`, `type`, and `risk`, with all high-risk rows and the first 25 low-risk rows. `--fields address,action,flags,reason` selects explicit columns. `--full` returns every row and all detail fields unless `--fields` overrides them. Saved-plan recovery hints retain `--plan-json`, expectations, and field selectors.
+
+State lists default to 100 resources. Truncated attributes report their original character counts. Recovery hints preserve the module and address; `--full` never disables secret redaction. Usage errors exit 2, operational errors exit 1, and `--help` works alongside command input without running the operation.
 
 ### Lint
 

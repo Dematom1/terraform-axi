@@ -154,15 +154,16 @@ describe("terraform-axi scaffold", () => {
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       join(configDir, "config.json"),
-      JSON.stringify({ binary: "tofu", modules: ["safe-module"], wrapper: "secret-token" }),
+      JSON.stringify({ binary: "tofu", modules: [home], wrapper: "secret-token" }),
     );
     try {
       const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi-ctx.js")], {
         encoding: "utf8",
+        cwd: home,
         env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
       });
       expect(output).toContain("tofu");
-      expect(output).toContain("safe-module");
+      expect(output).toContain(home);
       expect(output).not.toContain("secret-token");
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -342,7 +343,7 @@ printf '{"tofu_version":"1.2.3"}\\n'
           env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") },
         },
       );
-      expect(result.status).toBe(1);
+      expect(result.status).toBe(2);
       expect(result.stdout).toContain("VALIDATION_ERROR");
       expect(readFileSync(path, "utf8")).toBe(original);
     } finally {
@@ -362,7 +363,7 @@ printf '{"tofu_version":"1.2.3"}\\n'
         [join(root, "dist", "bin", "terraform-axi.js"), "setup", action, extra],
         { encoding: "utf8", env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, ".config") } },
       );
-      expect(result.status).toBe(1);
+      expect(result.status).toBe(2);
       expect(result.stdout).toContain("VALIDATION_ERROR");
       expect(existsSync(join(home, ".config", "terraform-axi", "config.json"))).toBe(false);
     } finally {

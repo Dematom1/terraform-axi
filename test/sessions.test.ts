@@ -165,19 +165,17 @@ describe("session memory", () => {
     expect(cli([], env)).toContain("next_action: terraform-axi setup --module <name-or-path>");
   });
 
-  it("SessionStart context exports the session id and shows last_session quickly without subprocesses", () => {
+  it("SessionStart context stays read-only even when CLAUDE_ENV_FILE is present", () => {
     const { log, env } = setup();
     recordInvocation("plan", "infra/prod", log, sessionKey("earlier"));
     const envFile = join(home, "claude-env");
-    const started = performance.now();
     const output = execFileSync(process.execPath, [join(root, "dist", "bin", "terraform-axi-ctx.js")], {
       encoding: "utf8",
       input: JSON.stringify({ session_id: "fresh-session" }),
       env: { ...env, PATH: "", CLAUDE_ENV_FILE: envFile },
     });
-    expect(performance.now() - started).toBeLessThan(200);
-    expect(readFileSync(envFile, "utf8")).toBe("export TERRAFORM_AXI_SESSION=fresh-session\n");
-    expect(output).toContain("last_session");
+    expect(existsSync(envFile)).toBe(false);
+    expect(output).not.toContain("last_session");
     expect(output).toContain("writes: never");
   });
 

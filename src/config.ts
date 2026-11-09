@@ -8,10 +8,23 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, isAbsolute } from "node:path";
 import { CliError } from "./errors.js";
 
-export type Config = { binary: "terraform" | "tofu" | "auto"; wrapper?: string; modules: string[] };
+export type Config = {
+  binary: "terraform" | "tofu" | "auto";
+  wrapper?: string;
+  modules: string[];
+  moduleDirectories?: Record<string, string>;
+};
+function isDirectoryMap(value: unknown): value is Record<string, string> {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.values(value).every((entry) => typeof entry === "string" && isAbsolute(entry))
+  );
+}
 export const defaults: Config = { binary: "auto", modules: [] };
 export function readConfig(path: string): Config {
   let value: unknown;
@@ -32,13 +45,15 @@ export function readConfig(path: string): Config {
       (typeof record.binary !== "string" || !["auto", "terraform", "tofu"].includes(record.binary))) ||
     (record.modules !== undefined &&
       (!Array.isArray(record.modules) || !record.modules.every((item) => typeof item === "string"))) ||
-    (record.wrapper !== undefined && typeof record.wrapper !== "string")
+    (record.wrapper !== undefined && typeof record.wrapper !== "string") ||
+    (record.moduleDirectories !== undefined && !isDirectoryMap(record.moduleDirectories))
   )
     throw new CliError(`malformed config: ${path}`);
   return {
     binary: (record.binary ?? "auto") as Config["binary"],
     modules: (record.modules ?? []) as string[],
     ...(record.wrapper === undefined ? {} : { wrapper: record.wrapper }),
+    ...(isDirectoryMap(record.moduleDirectories) ? { moduleDirectories: record.moduleDirectories } : {}),
   };
 }
 export function writeConfig(path: string, config: Config): void {
