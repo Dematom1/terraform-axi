@@ -240,7 +240,7 @@ it("6: bare versions work without a command graph and stay near the same-run Nod
       expect(result.stdout).toBe(expected);
     }
   }
-  // Five interleaved cold processes. This is a broad regression guard, not a speedup claim.
-  expect(version.sort((a, b) => a - b)[2]!).toBeLessThan(floor.sort((a, b) => a - b)[2]! * 4);
+  // Five interleaved cold processes with scheduler slack; missing-graph isolation is the deterministic guard.
+  expect(version.sort((a, b) => a - b)[2]!).toBeLessThan(floor.sort((a, b) => a - b)[2]! * 4 + 100);
   expect(spawnSync(process.execPath, [entry, "plan", "--help"], { env }).status).not.toBe(0);
 });

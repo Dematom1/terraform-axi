@@ -39,10 +39,22 @@ export function hookStatus() {
   const hasCapture = (path: string): boolean => {
     const entries = readSettings(path)?.hooks?.SessionEnd;
     return Boolean(
-      entries?.some(
+      Array.isArray(entries) &&
+      entries.some(
         (entry) =>
+          entry !== null &&
+          typeof entry === "object" &&
           "hooks" in entry &&
-          entry.hooks?.some((hook) => hook.command?.includes(`${marker}-ctx`) && hook.command.includes("--capture")),
+          Array.isArray(entry.hooks) &&
+          entry.hooks.some(
+            (hook) =>
+              hook !== null &&
+              typeof hook === "object" &&
+              "command" in hook &&
+              typeof hook.command === "string" &&
+              hook.command.includes(`${marker}-ctx`) &&
+              hook.command.includes("--capture"),
+          ),
       ),
     );
   };
@@ -75,7 +87,8 @@ export function repairHookDuplicates(removeCapture = false): void {
     const end = updated.hooks?.SessionEnd;
     if (
       end &&
-      !end.every((entry): entry is HookGroup => entry !== null && typeof entry === "object" && !("command" in entry))
+      (!Array.isArray(end) ||
+        !end.every((entry): entry is HookGroup => entry !== null && typeof entry === "object" && !("command" in entry)))
     )
       throw new CliError(`CONFIG_ERROR: ${path}: invalid SessionEnd groups`);
     const proxy: HookSettings = { hooks: { ...(end ? { SessionStart: end } : {}) } };
@@ -97,8 +110,6 @@ export function repairHookDuplicates(removeCapture = false): void {
     if (JSON.stringify(current) !== JSON.stringify(updated))
       writeFileSync(path, `${JSON.stringify(updated, null, 2)}\n`, "utf8");
   }
-  if (!removeCapture) {
-    if (readFileSync(status.opencode.path, "utf8") !== pluginSource)
-      writeFileSync(status.opencode.path, pluginSource, "utf8");
-  }
+  if (!removeCapture && status.opencode.installed && readFileSync(status.opencode.path, "utf8") !== pluginSource)
+    writeFileSync(status.opencode.path, pluginSource, "utf8");
 }

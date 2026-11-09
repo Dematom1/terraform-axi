@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { commandLine, parseArgs } from "../args.js";
+import { commandLine, parseArgs, shellWord } from "../args.js";
 import type { Config } from "../config.js";
 import { ReportError, UsageError } from "../errors.js";
 import { PLAN_ARGS } from "../plan/command.js";
@@ -15,7 +15,6 @@ const TIMEOUT_MS = 600_000;
 // Drift is reported in Terraform's own words: a resource deleted out of band is `delete`, not a planned DESTROY.
 const DRIFT_ACTION: Partial<Record<PlanChange["action"], string>> = { DESTROY: "delete", REPLACE: "replace" };
 const driftAction = (row: PlanChange) => DRIFT_ACTION[row.action] ?? row.action;
-const shellWord = (word: string) => (/^[\w./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`);
 
 /**
  * Runs a refresh-only plan and reports drift. The drifted count comes from `resource_drift` events only:

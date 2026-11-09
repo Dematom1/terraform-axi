@@ -244,6 +244,7 @@ export async function main(
     formatError: (error) => {
       const usageError =
         error instanceof UsageError || (error instanceof AxiError && error.code === "VALIDATION_ERROR");
+      const guidance = commandHelp(argv[0] ?? "", argv[1]);
       return {
         output: `${
           error instanceof ReportError
@@ -256,11 +257,12 @@ export async function main(
                     : ((error instanceof CliError ? error.message.match(/^([A-Z_]+):/)?.[1] : undefined) ??
                       (argv[0] === "setup" ? "SETUP_FAILED" : "COMMAND_FAILED")),
                 error: error instanceof Error ? error.message : String(error),
-                ...(usageError ? commandHelp(argv[0] ?? "", argv[1]) : {}),
+                ...(usageError ? guidance : {}),
                 help: usageError
                   ? [
                       `Run \`${reference}\` for this invocation's reference`,
-                      ...commandHelp(argv[0] ?? "", argv[1]).flags,
+                      ...guidance.flags,
+                      ...(guidance.help ?? []),
                     ]
                   : error instanceof CliError && /CONFIG_|SETUP_|malformed config/.test(error.message)
                     ? ["Check file permissions or repair malformed settings before retrying", ...hints]

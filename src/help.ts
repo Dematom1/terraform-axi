@@ -6,7 +6,7 @@ import { lintUsage } from "./commands/lint.js";
 export function commandHelp(
   command: string,
   subcommand?: string,
-): { usage: string; flags: string[]; defaults: string; examples: string[]; [key: string]: unknown } {
+): { usage: string; flags: string[]; defaults: string; examples: string[]; help?: string[]; [key: string]: unknown } {
   const universal = "--help: show this reference without running the operation";
   switch (command) {
     case "plan":

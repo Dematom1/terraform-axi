@@ -226,7 +226,7 @@ export function parsePlanArgs(args: string[]): {
     invocation: commandLine([
       "plan",
       ...Object.entries(parsed.values).flatMap(([flag, values]) => (flag === "--full" ? [flag] : [flag, values[0]!])),
-      ...(module ? [module.startsWith("-") ? `./${module}` : module] : []),
+      ...(module ? [module] : []),
     ]),
   };
 }
