@@ -19,7 +19,7 @@ See the [README command reference](https://github.com/Dematom1/terraform-axi#com
 | `terraform-axi plan <module> --expect add=N,change=N,destroy=N`                             | Assert planned counts (any subset); exits 1 with reasons on mismatch                                                   |
 | `terraform-axi plan <module> [--binary terraform\|tofu] [--timeout seconds] [--full]`       | Run the binary directly instead of the wrapper, cap the plan time (default 1800s), or list every low-risk row          |
 | `terraform-axi plan --plan-json <file>`                                                     | Same summary from a saved `show -json <planfile>` document or `plan -json` stream                                      |
-| `terraform-axi drift <module> [--binary terraform\|tofu]`                                   | Drift from a refresh-only plan: drifted resources and a human-only accept command                                      |
+| `terraform-axi drift <module> [--binary terraform\|tofu] [--full]`                                   | Drift from a refresh-only plan: drifted resources and a human-only accept command                                      |
 | `terraform-axi lint <module> [--binary terraform\|tofu]`                                   | Read-only fmt check, initialized validate, and optional tflint; structured findings and count                         |
 | `terraform-axi doctor [module] [--offline]`                                                  | Backend, credential and unauthenticated reachability diagnostics; no init or state access                              |
 | `terraform-axi doctor --explain TEXT` or `--explain -`                                      | Explain a common S3 or Backblaze B2 diagnostic                                                                         |
@@ -30,6 +30,8 @@ See the [README command reference](https://github.com/Dematom1/terraform-axi#com
 | `terraform-axi setup hooks` / `setup uninstall`                                             | Install or remove terraform-axi-managed user-level session start/end integrations                                   |
 
 Plan lists default to `address`, `action`, `type`, and `risk`, with all high-risk rows and the first 25 low-risk rows. `--fields address,action,flags,reason` selects explicit columns. `--full` returns every row and all detail fields unless `--fields` overrides them. Saved-plan recovery hints retain `--plan-json`, expectations, and field selectors.
+
+Drift lists default to 20 rows and report the total drifted count. When truncated, the recovery command preserves the module and `--binary` selector; `--full` returns every drift row.
 
 State lists default to 100 resources. Truncated attributes report their original character counts. Recovery hints preserve the module and address; `--full` never disables secret redaction. Usage errors exit 2, operational errors exit 1, and `--help` works alongside command input without running the operation.
 
