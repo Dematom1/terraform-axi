@@ -38,14 +38,18 @@ export function commandHelp(
     case "drift":
       return {
         usage: driftUsage,
-        flags: ["--binary terraform|tofu: bypass configured wrapper", universal],
-        defaults: "600 seconds; first 20 drift rows; configured binary/wrapper (auto if unset)",
+        flags: ["--binary terraform|tofu: bypass configured wrapper", "--full: all drift rows", universal],
+        defaults: "600 seconds; first 20 drift rows (--full lists all); configured binary/wrapper (auto if unset)",
         runs: DRIFT_ARGS.join(" "),
         diagnostics: "metadata only; provider text and subprocess excerpts withheld",
         wrapper_stdout:
           "plain-text progress counted as skipped_wrapper_lines; JSON-looking lines must be complete JSON events; prefer progress on stderr",
         never: "apply, refresh, -out plan files, state writes",
-        examples: ["terraform-axi drift infra/prod", "terraform-axi drift . --binary tofu"],
+        examples: [
+          "terraform-axi drift infra/prod",
+          "terraform-axi drift infra/prod --full",
+          "terraform-axi drift . --binary tofu --full",
+        ],
       };
     case "lint":
       return {

@@ -151,8 +151,13 @@ describe("drift invocation", () => {
     expect(calls()[0]!.argv.slice(0, 2)).toEqual([`-chdir=${module}`, "plan"]);
   });
 
-  it("bounds drift rows and says how many were left out", () => {
-    const events = Array.from({ length: 25 }, (_, i) =>
+  it.each([
+    { count: 21, full: false, binary: undefined },
+    { count: 21, full: true, binary: undefined },
+    { count: 20, full: false, binary: undefined },
+    { count: 21, full: false, binary: "terraform" },
+  ])("lists drift with $count rows, full=$full, binary=$binary", ({ count, full, binary }) => {
+    const events = Array.from({ length: count }, (_, i) =>
       JSON.stringify({
         type: "resource_drift",
         change: { resource: { addr: `local_file.f${i}`, resource_type: "local_file" }, action: "update" },
@@ -164,9 +169,30 @@ describe("drift invocation", () => {
       [...events, JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } })].join("\n"),
     );
     withWrapper();
-    const { output } = drift(["m"], { TF_AXI_FIXTURE: stream });
-    expect(output).toMatchObject({ drifted: 25, truncated: "showing 20 of 25" });
-    expect(output.drift).toHaveLength(20);
+    let module = "infra/a b";
+    const env = { TF_AXI_FIXTURE: stream, PATH: process.env.PATH ?? "" };
+    if (binary) {
+      const bin = join(home, "bin");
+      mkdirSync(bin);
+      writeFileSync(join(bin, binary), `#!/bin/sh\nexec ${process.execPath} ${fake} "$@"\n`, { mode: 0o700 });
+      module = join(home, "my module");
+      mkdirSync(module);
+      env.PATH = `${bin}:${env.PATH}`;
+    }
+    const args = [module, ...(binary ? ["--binary", binary] : []), ...(full ? ["--full"] : [])];
+    const { status, output } = drift(args, env);
+    expect(status).toBe(0);
+    expect(output.drifted).toBe(count);
+    expect(output.drift).toHaveLength(full ? count : 20);
+    if (!full && count > 20) {
+      expect(output.truncated).toBe(`showing 20 of ${count}`);
+      expect(output.help).toContain(
+        `Run \`terraform-axi drift '${module}'${binary ? ` --binary ${binary}` : ""} --full\` to list all ${count} drifted resources`,
+      );
+    } else {
+      expect(output).not.toHaveProperty("truncated");
+      expect(String(output.help)).not.toContain("--full");
+    }
   });
 
   it("rejects a missing module as a usage error before spawning", () => {
