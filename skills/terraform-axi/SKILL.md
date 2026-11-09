@@ -31,7 +31,6 @@ See the [README command reference](https://github.com/Dematom1/terraform-axi#com
 
 Plan lists default to `address`, `action`, `type`, and `risk`, with all high-risk rows and the first 25 low-risk rows. `--fields address,action,flags,reason` selects explicit columns. `--full` returns every row and all detail fields unless `--fields` overrides them. Saved-plan recovery hints retain `--plan-json`, expectations, and field selectors.
 
-Drift lists default to 20 rows and report the total drifted count. When truncated, the recovery command preserves the module and `--binary` selector; `--full` returns every drift row.
 
 State lists default to 100 resources. Truncated attributes report their original character counts. Recovery hints preserve the module and address; `--full` never disables secret redaction. Usage errors exit 2, operational errors exit 1, and `--help` works alongside command input without running the operation.
 
