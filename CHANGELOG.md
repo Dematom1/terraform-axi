@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.4...terraform-axi-v0.1.5) (2026-11-09)
+
+
+### Features
+
+* add full drift output ([#31](https://github.com/Dematom1/terraform-axi/issues/31)) ([b58d062](https://github.com/Dematom1/terraform-axi/commit/b58d062929704eed74aef0c72ef91c0391d696f7))
+
 ## [0.1.4](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.3...terraform-axi-v0.1.4) (2026-11-09)
 
 
