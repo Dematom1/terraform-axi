@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.3...terraform-axi-v0.1.4) (2026-11-09)
+
+
+### Bug Fixes
+
+* address terraform-axi AXI admission findings ([#29](https://github.com/Dematom1/terraform-axi/issues/29)) ([bb5e053](https://github.com/Dematom1/terraform-axi/commit/bb5e053ed2d350fcb240a7cea4a95e0f18490e47))
+
 ## [0.1.3](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.2...terraform-axi-v0.1.3) (2026-11-07)
 
 
