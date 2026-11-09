@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { parseArgs } from "../args.js";
+import { commandLine, parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { ReportError, UsageError } from "../errors.js";
 import { PLAN_ARGS } from "../plan/command.js";
@@ -29,6 +29,7 @@ export async function drift(args: string[], config: Config): Promise<Record<stri
   const binary = parsed.values["--binary"]?.[0] as "terraform" | "tofu" | undefined;
   // `--binary` runs that executable directly, bypassing any configured wrapper, as `plan` does.
   const runConfig: Config = binary ? { binary, modules: config.modules } : config;
+  const invocation = commandLine(["drift", module, ...(binary ? ["--binary", binary] : [])]);
   const result = await run(runConfig, module, TIMEOUT_MS, {
     args: DRIFT_ARGS,
     exitCodes: [1, 2],
@@ -50,13 +51,13 @@ export async function drift(args: string[], config: Config): Promise<Record<stri
     if (result.exitCode) report.exit_code = result.exitCode;
     if (result.stderr.trim())
       report.stderr = { lines: result.stderr.trim().split(/\r?\n/).length, content: "withheld" };
-    report.help = ["Fix the reported errors, then rerun drift"];
+    report.help = [`Fix the reported errors, then rerun \`${invocation}\``];
     throw new ReportError(report);
   }
   // Malformed JSON events mean drift rows may be missing; wrapper progress is counted separately.
   if (events.summary === "unavailable" || events.malformed) {
     report.status = "incomplete";
-    report.help = ["The plan output is incomplete; rerun drift before trusting it"];
+    report.help = [`The plan output is incomplete; rerun \`${invocation}\` before trusting it`];
     throw new ReportError(report);
   }
 
@@ -69,7 +70,7 @@ export async function drift(args: string[], config: Config): Promise<Record<stri
     report.human_only = humanOnly(runConfig, module, events.flavor);
   }
   report.help = [
-    `Run \`terraform-axi plan ${shellWord(module)}\` to see planned configuration changes`,
+    `Run \`${commandLine(["plan", module, ...(binary ? ["--binary", binary] : [])])}\` to see planned configuration changes`,
     ...(rows.length ? ["A human may accept the drift into state with the human_only command; never run it"] : []),
   ];
   return report;

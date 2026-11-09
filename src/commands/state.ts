@@ -1,5 +1,5 @@
 import { encode } from "@toon-format/toon";
-import { parseArgs } from "../args.js";
+import { commandLine, parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { UsageError } from "../errors.js";
 import { runOperation } from "../runner.js";
@@ -54,7 +54,8 @@ function distance(a: string, b: string): number {
   return row[b.length]!;
 }
 function cut(value: unknown): unknown {
-  if (typeof value === "string") return value.length > 200 ? `${value.slice(0, 200)}…` : value;
+  if (typeof value === "string")
+    return value.length > 200 ? `${value.slice(0, 200)}… (truncated, ${value.length} chars total)` : value;
   if (Array.isArray(value)) return value.map(cut);
   if (value !== null && typeof value === "object")
     return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, cut(entry)]));
@@ -76,9 +77,15 @@ export async function stateCommand(config: Config, argv: string[]): Promise<stri
       );
     return encode({
       resources: addresses
-        .slice(0, 100)
+        .slice(0, full ? addresses.length : 100)
         .map((address) => ({ address, type: types.get(address) ?? resourceType(address) })),
       total: addresses.length,
+      help: [
+        `Run \`${commandLine(["state", "resource", module, "<address>"])}\` to inspect a resource`,
+        ...(!full && addresses.length > 100
+          ? [`Run \`${commandLine(["state", "list", module, "--full"])}\` to list all ${addresses.length} resources`]
+          : []),
+      ],
     });
   }
   if (command === "resource") {
@@ -97,12 +104,22 @@ export async function stateCommand(config: Config, argv: string[]): Promise<stri
       return encode({
         status: model.resources.length ? "not_found" : "empty_state",
         ...(model.resources.length ? { address, closest } : {}),
+        help: [`Run \`${commandLine(["state", "list", module, "--full"])}\` to find an exact resource address`],
       });
     }
+    const attributes = full ? resource.attributes : cut(resource.attributes);
+    const truncated = !full && JSON.stringify(attributes) !== JSON.stringify(resource.attributes);
     return encode({
       ...resource,
-      attributes: full ? resource.attributes : cut(resource.attributes),
+      attributes,
       redacted: redacted.redacted,
+      ...(truncated
+        ? {
+            help: [
+              `Run \`${commandLine(["state", "resource", module, address, "--full"])}\` to see complete attributes (secrets remain redacted)`,
+            ],
+          }
+        : {}),
     });
   }
   throw new UsageError("usage: terraform-axi state list <module> | state resource <module> <address>");

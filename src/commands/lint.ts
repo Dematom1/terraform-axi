@@ -1,6 +1,6 @@
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseArgs } from "../args.js";
+import { commandLine, parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { ReportError, UsageError } from "../errors.js";
 import { execute, run } from "../runner.js";
@@ -165,6 +165,13 @@ export async function lint(args: string[], config: Config): Promise<Record<strin
     checks,
     count: findings.length,
     findings,
+    ...(findings.some((finding) => finding.severity === "error")
+      ? {
+          help: [
+            `Fix the reported files, then rerun \`${commandLine(["lint", module, ...(binary ? ["--binary", binary] : [])])}\``,
+          ],
+        }
+      : {}),
   };
   if (report.status === "error") throw new ReportError(report);
   return report;

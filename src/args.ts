@@ -19,7 +19,7 @@ export function parseArgs(
       const equal = arg.indexOf("=");
       const name = equal < 0 ? arg : arg.slice(0, equal);
       const spec = specs.get(name);
-      if (!spec) throw new UsageError(`unknown flag: ${name}`);
+      if (!spec) throw new UsageError(`unknown flag: ${name}; valid flags: ${[...specs.keys(), "--help"].join(", ")}`);
       if (spec.boolean) {
         if (equal >= 0) throw new UsageError(`invalid value for ${name}`);
         const prior = values[name] ?? [];
@@ -34,9 +34,14 @@ export function parseArgs(
       const prior = values[name] ?? [];
       if (prior.length && !spec.repeatable) throw new UsageError(`duplicate flag: ${name}`);
       values[name] = [...prior, value];
-    } else if (arg.startsWith("-")) throw new UsageError(`unknown flag: ${arg}`);
+    } else if (arg.startsWith("-"))
+      throw new UsageError(`unknown flag: ${arg}; valid flags: ${[...specs.keys(), "--help"].join(", ")}`);
     else if (command === undefined) command = arg;
     else positional.push(arg);
   }
   return { ...(command === undefined ? {} : { command }), values, positional };
 }
+
+export const shellWord = (word: string): string =>
+  /^[\w./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`;
+export const commandLine = (args: string[]): string => ["terraform-axi", ...args.map(shellWord)].join(" ");

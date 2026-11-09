@@ -114,7 +114,7 @@ describe("show -json action completeness", () => {
 
 describe("plan --plan-json risk flags", () => {
   it("flags destroys, replacements, IAM, secrets, sensitive outputs, and unknown actions", () => {
-    const { status, report, stdout } = tfaxi(["plan", "--plan-json", planFixture("risk-flags-show.json")]);
+    const { status, report, stdout } = tfaxi(["plan", "--plan-json", planFixture("risk-flags-show.json"), "--full"]);
     expect(changeRows(report)).toEqual({
       "aws_s3_bucket.logs": "DESTROY | destroy | delete_because_no_resource_config",
       "aws_instance.web": "REPLACE | destroy replace(tainted) | tainted",
@@ -245,6 +245,18 @@ describe("secret-safe plan and drift output", () => {
 });
 
 describe("plan <module> through the configured runner", () => {
+  it("offers a scoped retry, not a count assertion, when a complete stream exits with an error", () => {
+    withFakeWrapper();
+    const result = tfaxi(["plan", "infra/prod", "--expect", "add=0"], {
+      TF_AXI_FIXTURE: planFixture("terraform-1.15.8-no-change.jsonl"),
+      TF_AXI_EXIT_CODE: "1",
+    });
+    expect(result.status).toBe(1);
+    expect(result.report.status).toBe("error");
+    expect(result.report.help).toEqual([
+      "Check the selected plan input and diagnostics, then rerun `terraform-axi plan --expect add=0 infra/prod` before trusting these rows",
+    ]);
+  });
   it("runs the exact read-only plan argv, treats exit 2 as changes present, and strips TF_CLI_ARGS", () => {
     const log = withFakeWrapper();
     const { status, report } = tfaxi(["plan", "infra/prod", "--expect", "add=4,change=2,destroy=4"], {

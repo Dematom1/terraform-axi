@@ -1,19 +1,28 @@
-import { installSessionStartHooks, runAxiCli, uninstallSessionStartHooks, type AxiCliCommand } from "axi-sdk-js";
+import {
+  AxiError,
+  exitCodeForError,
+  installSessionStartHooks,
+  runAxiCli,
+  uninstallSessionStartHooks,
+  type AxiCliCommand,
+} from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION } from "./version.js";
-import { parseArgs } from "./args.js";
+import { commandLine, parseArgs } from "./args.js";
 import { readConfig, writeConfig, type Config } from "./config.js";
 import { run, validateWrapper } from "./runner.js";
 import { CliError, ReportError, UsageError } from "./errors.js";
 import { hookStatus, repairHookDuplicates } from "./hooks.js";
 import { lastSession } from "./sessions.js";
-import { PLAN_ARGS, planCommand, usage as planUsage } from "./plan/command.js";
-import { DRIFT_ARGS, drift, driftUsage } from "./commands/drift.js";
+import { lastCapture } from "./capture.js";
+import { planCommand } from "./plan/command.js";
+import { drift } from "./commands/drift.js";
+import { commandHelp } from "./help.js";
 import { stateCommand } from "./commands/state.js";
-import { lint, lintUsage } from "./commands/lint.js";
+import { lint } from "./commands/lint.js";
 import { inspectBackend, probeBackend } from "./doctor/backend.js";
 import { explain } from "./doctor/explain.js";
 import { rules } from "./doctor/rules.js";
@@ -35,48 +44,16 @@ function describeVersion(version: unknown): { flavor: "terraform" | "opentofu" |
 }
 const hints = ["Run `terraform-axi setup` to configure Terraform/OpenTofu", "Run `terraform-axi --help` for commands"];
 const commands: Record<string, AxiCliCommand<undefined>> = {
-  plan: async (args) => {
-    if (args.length === 1 && args[0] === "--help")
-      return output({
-        usage: planUsage,
-        runs: PLAN_ARGS.join(" "),
-        diagnostics:
-          "metadata only; provider text and subprocess excerpts withheld; --full lists rows, not diagnostic text",
-        wrapper_stdout:
-          "plain-text progress counted as skipped_wrapper_lines; JSON-looking lines must be complete JSON events; prefer progress on stderr",
-        never: "apply, destroy, -out plan files, state writes",
-        help: ["Run `terraform-axi plan <module> --expect add=0,change=0,destroy=0` to assert a no-op plan"],
-      });
-    return output(await planCommand(args, config()));
-  },
-  drift: async (args) => {
-    if (args.length === 1 && args[0] === "--help")
-      return output({
-        usage: driftUsage,
-        runs: DRIFT_ARGS.join(" "),
-        diagnostics: "metadata only; provider text and subprocess excerpts withheld",
-        wrapper_stdout:
-          "plain-text progress counted as skipped_wrapper_lines; JSON-looking lines must be complete JSON events; prefer progress on stderr",
-        never: "apply, refresh, -out plan files, state writes",
-        help: ["Run `terraform-axi plan <module>` to see planned configuration changes"],
-      });
-    return output(await drift(args, config()));
-  },
-  lint: async (args) =>
-    args.length === 1 && args[0] === "--help"
-      ? output({
-          usage: lintUsage,
-          runs: "fmt -check; validate -json only with a data directory; tflint if installed",
-          never: "init or format writes",
-          examples: ["terraform-axi lint infra/prod", "terraform-axi lint . --binary tofu"],
-        })
-      : output(await lint(args, config())),
+  plan: async (args) => output(await planCommand(args, config())),
+  drift: async (args) => output(await drift(args, config())),
+  lint: async (args) => output(await lint(args, config())),
   doctor: async (args) => {
-    if (args.length === 1 && args[0] === "--help")
-      return output({ usage: "terraform-axi doctor [module] [--offline] | --explain TEXT|-", help: hints });
-    if (args[0] === "--explain") {
-      if (args.length !== 2) throw new CliError("VALIDATION_ERROR: doctor --explain requires TEXT or -");
-      let diagnostic = args[1]!;
+    const parsed = parseArgs(args, [{ name: "--offline", boolean: true }, { name: "--explain" }]);
+    if (parsed.positional.length) throw new UsageError("doctor accepts at most one module");
+    if (parsed.values["--explain"]) {
+      if (parsed.command || parsed.values["--offline"])
+        throw new UsageError("doctor --explain cannot be combined with a module or --offline");
+      let diagnostic = parsed.values["--explain"][0]!;
       if (diagnostic === "-") {
         const chunks: Buffer[] = [];
         for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
@@ -85,10 +62,8 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       const explanation = explain(diagnostic);
       return output({ matched: Boolean(explanation), ...(explanation ?? {}) });
     }
-    const offline = args.includes("--offline");
-    const positional = args.filter((arg) => arg !== "--offline");
-    if (positional.length > 1) throw new CliError("VALIDATION_ERROR: doctor accepts at most one module");
-    const module = positional[0];
+    const offline = parsed.values["--offline"] !== undefined;
+    const module = parsed.command;
     const backend = module ? inspectBackend(module) : undefined;
     const diagnosis = backend ? rules(process.env, backend) : undefined;
     const reachability = backend
@@ -114,62 +89,12 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       help: hints,
     });
   },
-  state: async (args) =>
-    (args.length === 1 && args[0] === "--help") ||
-    (args.length === 2 && ["list", "resource"].includes(args[0] ?? "") && args[1] === "--help")
-      ? output({
-          usage:
-            args[0] === "list"
-              ? "terraform-axi state list <module> [--full]"
-              : args[0] === "resource"
-                ? "terraform-axi state resource <module> <address> [--full]"
-                : "terraform-axi state list <module> [--full] | state resource <module> <address> [--full]",
-          help:
-            args[0] === "list"
-              ? [
-                  "Required: configured module name.",
-                  "--full: resolve resource types from state (default: infer types from addresses); output is capped at 100 resources.",
-                  "Example: terraform-axi state list infra/prod --full",
-                ]
-              : args[0] === "resource"
-                ? [
-                    "Required: configured module name and resource address.",
-                    "--full: include untruncated attributes (default: values are truncated).",
-                    'Example: terraform-axi state resource infra/prod aws_instance.web["blue"] --full',
-                  ]
-                : [
-                    "Inspect state in a configured module without changing infrastructure.",
-                    "Run `terraform-axi state list --help` or `terraform-axi state resource --help` for command options.",
-                  ],
-        })
-      : stateCommand(config(), args),
+  state: async (args) => stateCommand(config(), args),
   setup: async (args) => {
-    if (args.length === 1 && args[0] === "--help")
-      return output({
-        usage:
-          "terraform-axi setup [--binary terraform|tofu|auto] [--wrapper command] [--module name] [--remove-module name]",
-        help: hints,
-      });
-    if (args.length === 2 && ["status", "hooks", "uninstall"].includes(args[0] ?? "") && args[1] === "--help") {
-      const details = {
-        status: [
-          "Arguments: none. Read-only; reports configuration and user-level hooks for Claude Code, Codex, and OpenCode.",
-          "Example: terraform-axi setup status",
-        ],
-        hooks: [
-          "Arguments: none. Writes or repairs user-level SessionStart integrations for Claude Code, Codex, and OpenCode.",
-          "Example: terraform-axi setup hooks",
-        ],
-        uninstall: [
-          "Arguments: none. Removes Terraform-AXI user-level hooks from Claude Code, Codex, and OpenCode; preserves unrelated settings.",
-          "Example: terraform-axi setup uninstall",
-        ],
-      };
-      const detail = args[0] === "status" ? details.status : args[0] === "hooks" ? details.hooks : details.uninstall;
-      return output({ usage: `terraform-axi setup ${args[0]} [--help]`, help: detail });
+    if (["status", "hooks", "uninstall"].includes(args[0] ?? "") && args.length !== 1) {
+      parseArgs(args.slice(1), []);
+      throw new UsageError("unexpected setup argument");
     }
-    if (["status", "hooks", "uninstall"].includes(args[0] ?? "") && args.length !== 1)
-      throw new CliError("VALIDATION_ERROR: unexpected setup argument");
     if (args[0] === "status")
       return output({
         config: configPath,
@@ -180,6 +105,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     if (args[0] === "uninstall") {
       // Codex [features].hooks is shared across tools, so uninstall retains it to avoid disabling other tools' hooks.
       const errors: string[] = [];
+      repairHookDuplicates(true);
       uninstallSessionStartHooks({ marker: name, onError: (message) => errors.push(message) });
       const hooks = hookStatus();
       if (errors.length) throw new CliError(`SETUP_FAILED: ${errors.join("; ")}`, 1, errors);
@@ -205,17 +131,28 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
       { name: "--module", repeatable: true },
       { name: "--remove-module", repeatable: true },
     ]);
-    if (parsed.command !== undefined || parsed.positional.length)
-      throw new CliError("VALIDATION_ERROR: unexpected setup argument");
+    if (parsed.command !== undefined || parsed.positional.length) throw new UsageError("unexpected setup argument");
     const settings = config();
     if (parsed.values["--binary"]?.[0]) settings.binary = parsed.values["--binary"][0] as Config["binary"];
     if (parsed.values["--wrapper"]?.[0]) {
-      validateWrapper(parsed.values["--wrapper"][0]!);
+      try {
+        validateWrapper(parsed.values["--wrapper"][0]!);
+      } catch (error) {
+        throw new UsageError(error instanceof Error ? error.message : "invalid wrapper");
+      }
       settings.wrapper = parsed.values["--wrapper"][0]!;
     }
-    settings.modules = [...new Set([...settings.modules, ...(parsed.values["--module"] ?? [])])];
-    for (const remove of parsed.values["--remove-module"] ?? [])
+    const added = parsed.values["--module"] ?? [];
+    settings.modules = [...new Set([...settings.modules, ...added])];
+    if (added.length)
+      settings.moduleDirectories = Object.fromEntries([
+        ...Object.entries(settings.moduleDirectories ?? {}),
+        ...added.map((module) => [module, resolve(module)]),
+      ]);
+    for (const remove of parsed.values["--remove-module"] ?? []) {
       settings.modules = settings.modules.filter((module) => module !== remove);
+      if (settings.moduleDirectories) delete settings.moduleDirectories[remove];
+    }
     writeConfig(configPath, settings);
     return output({
       setup: "configured",
@@ -225,7 +162,7 @@ const commands: Record<string, AxiCliCommand<undefined>> = {
     });
   },
 };
-const help = `usage: terraform-axi <command> [args]\ncommands[7]:\n  (none)=home, plan, drift, lint, doctor, state, setup\nsummary[7]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: resources changed outside Terraform/OpenTofu (refresh-only plan)\n  lint: read-only formatting, initialized validation, and optional tflint findings\n  doctor: backend, reachability and credential diagnostics (no init or state access)\n  state: list resources or inspect one with secrets redacted\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart hooks for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
+const help = `usage: terraform-axi <command> [args]\ncommands[7]:\n  (none)=home, plan, drift, lint, doctor, state, setup\nsummary[7]:\n  (none): configured modules, wrapper and available Terraform/OpenTofu versions\n  plan: read-only plan risk summary; --expect add=N,change=N,destroy=N asserts counts\n  drift: resources changed outside Terraform/OpenTofu (refresh-only plan)\n  lint: read-only formatting, initialized validation, and optional tflint findings\n  doctor: backend, reachability and credential diagnostics (no init or state access)\n  state: list resources or inspect one with secrets redacted\n  setup: configure binary, wrapper and modules; hooks, status and uninstall\nsetup[3]:\n  hooks: install user-level SessionStart and SessionEnd integrations for supported agents\n  status: show setup config and managed hook status\n  uninstall: remove only terraform-axi-managed user-level hooks\n`;
 async function home(): Promise<string> {
   const c = config();
   const versions: Record<string, string> = {};
@@ -262,7 +199,7 @@ async function home(): Promise<string> {
           : "via wrapper: version probe failed";
     }
   }
-  const session = lastSession();
+  const session = lastCapture(process.cwd(), process.env.TERRAFORM_AXI_SESSION) ?? lastSession();
   return output({
     modules: c.modules.length ? c.modules : "none configured",
     ...(session ? { last_session: session } : {}),
@@ -277,10 +214,16 @@ export async function main(
   argv = process.argv.slice(2),
   stdout: { write: (chunk: string) => unknown } = process.stdout,
 ): Promise<void> {
-  if (argv.length === 2 && argv[0] === "update" && argv[1] === "--help") {
-    stdout.write(output({ usage: "terraform-axi update", help: hints }));
+  if (argv[0] === "update" && argv.includes("--help")) {
+    stdout.write(`${output(commandHelp("update"))}\n`);
     return;
   }
+  const subcommand =
+    (argv[0] === "state" && ["list", "resource"].includes(argv[1] ?? "")) ||
+    (argv[0] === "setup" && ["status", "hooks", "uninstall"].includes(argv[1] ?? ""))
+      ? argv[1]
+      : undefined;
+  const reference = commandLine([argv[0] ?? "", ...(subcommand ? [subcommand] : []), "--help"]);
   await runAxiCli<undefined>({
     description: "Read-only Terraform and OpenTofu for agents",
     version: VERSION,
@@ -292,24 +235,41 @@ export async function main(
       help,
     }),
     commands,
+    getCommandHelp: (command) =>
+      Object.hasOwn(commands, command) ? `${output(commandHelp(command, argv[1]))}\n` : undefined,
+    renderUnknownCommand: (command) =>
+      `${output({ code: "VALIDATION_ERROR", error: `unknown command: ${command}`, help: ["Run `terraform-axi --help` to choose a command"] })}\n`,
     home: async () => home(),
     resolveContext: () => undefined,
-    formatError: (error) => ({
-      output: `${
-        error instanceof ReportError
-          ? output(error.report)
-          : output({
-              code:
-                error instanceof UsageError
+    formatError: (error) => {
+      const usageError =
+        error instanceof UsageError || (error instanceof AxiError && error.code === "VALIDATION_ERROR");
+      return {
+        output: `${
+          error instanceof ReportError
+            ? output(error.report)
+            : output({
+                code: usageError
                   ? "VALIDATION_ERROR"
-                  : ((error instanceof CliError ? error.message.match(/^([A-Z_]+):/)?.[1] : undefined) ??
-                    (argv[0] === "setup" ? "SETUP_FAILED" : "COMMAND_FAILED")),
-              error: error instanceof Error ? error.message : String(error),
-              help: ["Check file permissions or repair malformed settings before retrying", ...hints],
-            })
-      }\n`,
-      exitCode: error instanceof CliError ? error.exitCode : 1,
-    }),
+                  : error instanceof AxiError
+                    ? error.code
+                    : ((error instanceof CliError ? error.message.match(/^([A-Z_]+):/)?.[1] : undefined) ??
+                      (argv[0] === "setup" ? "SETUP_FAILED" : "COMMAND_FAILED")),
+                error: error instanceof Error ? error.message : String(error),
+                ...(usageError ? commandHelp(argv[0] ?? "", argv[1]) : {}),
+                help: usageError
+                  ? [
+                      `Run \`${reference}\` for this invocation's reference`,
+                      ...commandHelp(argv[0] ?? "", argv[1]).flags,
+                    ]
+                  : error instanceof CliError && /CONFIG_|SETUP_|malformed config/.test(error.message)
+                    ? ["Check file permissions or repair malformed settings before retrying", ...hints]
+                    : [`Check the selected input and prerequisites, then retry \`${commandLine(argv)}\``],
+              })
+        }\n`,
+        exitCode: error instanceof CliError ? error.exitCode : error instanceof AxiError ? exitCodeForError(error) : 1,
+      };
+    },
   });
 }
 if (import.meta.url === `file://${process.argv[1]}`) void main();

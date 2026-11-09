@@ -1,15 +1,18 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   computeSessionStartHookRemoval,
   computeSessionStartHookUpdate,
   sessionStartHookStatus,
   type HookSettings,
+  type HookGroup,
 } from "axi-sdk-js";
 import { CliError } from "./errors.js";
 
 const marker = "terraform-axi";
+const plugin = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "opencode.js")).href;
+const pluginSource = `// axi-sdk-js managed opencode plugin: ${marker}\nexport { default } from ${JSON.stringify(plugin)};\n`;
 function readSettings(path: string): HookSettings | undefined {
   try {
     const value: unknown = JSON.parse(readFileSync(path, "utf8"));
@@ -21,7 +24,7 @@ function readSettings(path: string): HookSettings | undefined {
   }
 }
 
-export function hookStatus(): ReturnType<typeof sessionStartHookStatus> {
+export function hookStatus() {
   const status = sessionStartHookStatus({ marker });
   // SDK status currently treats unreadable or malformed settings as absent.
   for (const path of [status.claude.path, status.codex.path]) readSettings(path);
@@ -33,10 +36,28 @@ export function hookStatus(): ReturnType<typeof sessionStartHookStatus> {
       throw new CliError(`CONFIG_ERROR: ${path}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  return status;
+  const hasCapture = (path: string): boolean => {
+    const entries = readSettings(path)?.hooks?.SessionEnd;
+    return Boolean(
+      entries?.some(
+        (entry) =>
+          "hooks" in entry &&
+          entry.hooks?.some((hook) => hook.command?.includes(`${marker}-ctx`) && hook.command.includes("--capture")),
+      ),
+    );
+  };
+  return {
+    ...status,
+    claude: { ...status.claude, capture_installed: hasCapture(status.claude.path) },
+    codex: { ...status.codex, capture_installed: hasCapture(status.codex.path) },
+    opencode: {
+      ...status.opencode,
+      capture_installed: status.opencode.installed && readFileSync(status.opencode.path, "utf8") === pluginSource,
+    },
+  };
 }
 
-export function repairHookDuplicates(): void {
+export function repairHookDuplicates(removeCapture = false): void {
   const status = hookStatus();
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
   const entrypoint = join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "terraform-axi-ctx.js");
@@ -46,9 +67,38 @@ export function repairHookDuplicates(): void {
     if (!current) continue;
     // SDK 0.1.13 updates only the first match. Remove all managed entries in memory,
     // then add one; unrelated hooks survive and the file is never left uninstalled.
-    const [removed] = computeSessionStartHookRemoval(current, marker);
-    const [updated] = computeSessionStartHookUpdate(removed, { marker, command });
+    let updated = current;
+    if (!removeCapture) {
+      const [removed] = computeSessionStartHookRemoval(current, marker);
+      [updated] = computeSessionStartHookUpdate(removed, { marker, command });
+    }
+    const end = updated.hooks?.SessionEnd;
+    if (
+      end &&
+      !end.every((entry): entry is HookGroup => entry !== null && typeof entry === "object" && !("command" in entry))
+    )
+      throw new CliError(`CONFIG_ERROR: ${path}: invalid SessionEnd groups`);
+    const proxy: HookSettings = { hooks: { ...(end ? { SessionStart: end } : {}) } };
+    const [removedEnd] = computeSessionStartHookRemoval(proxy, marker);
+    const withEnd = removeCapture
+      ? removedEnd
+      : computeSessionStartHookUpdate(removedEnd, { marker, command: `${command} --capture`, timeoutSeconds: 3 })[0];
+    updated = structuredClone(updated);
+    updated.hooks ??= {};
+    if (withEnd.hooks?.SessionStart) updated.hooks.SessionEnd = withEnd.hooks.SessionStart;
+    else delete updated.hooks.SessionEnd;
+    const { SessionStart, SessionEnd, ...otherEvents } = updated.hooks;
+    updated.hooks = {
+      ...otherEvents,
+      ...(SessionStart ? { SessionStart } : {}),
+      ...(SessionEnd ? { SessionEnd } : {}),
+    };
+    if (!Object.keys(updated.hooks).length) delete updated.hooks;
     if (JSON.stringify(current) !== JSON.stringify(updated))
       writeFileSync(path, `${JSON.stringify(updated, null, 2)}\n`, "utf8");
+  }
+  if (!removeCapture) {
+    if (readFileSync(status.opencode.path, "utf8") !== pluginSource)
+      writeFileSync(status.opencode.path, pluginSource, "utf8");
   }
 }

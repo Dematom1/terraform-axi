@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { parseArgs } from "../args.js";
+import { commandLine, parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { CliError, ReportError, UsageError } from "../errors.js";
 import { run } from "../runner.js";
@@ -15,11 +15,13 @@ import { parsePlanFile } from "./show.js";
 export const PLAN_ARGS = ["plan", "-json", "-input=false", "-lock=false", "-detailed-exitcode"];
 const FAILED_EXIT = 1;
 export const usage =
-  "terraform-axi plan <module> [--expect add=N,change=N,destroy=N] [--binary terraform|tofu] [--timeout seconds] [--full] | terraform-axi plan --plan-json <file> [--expect ...] [--full]";
+  "terraform-axi plan <module> [--expect add=N,change=N,destroy=N] [--binary terraform|tofu] [--timeout seconds] [--full] [--fields columns] | terraform-axi plan --plan-json <file> [--expect ...] [--full] [--fields columns]";
 const DEFAULT_TIMEOUT_SECONDS = 30 * 60;
 const MAX_TIMEOUT_SECONDS = 2_147_483;
 const LOW_RISK_SHOWN = 25;
-const shellWord = (word: string) => (/^[\w./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`);
+const FIELDS = ["address", "action", "type", "risk", "flags", "reason"] as const;
+type Field = (typeof FIELDS)[number];
+const isField = (value: string): value is Field => FIELDS.some((field) => field === value);
 
 export function renderPlan(
   events: PlanEvents,
@@ -28,6 +30,9 @@ export function renderPlan(
     expected?: ExpectedCounts;
     full?: boolean;
     module?: string;
+    fields?: Field[];
+    invocation?: string;
+    failed?: boolean;
   },
 ): { report: Record<string, unknown>; ok: boolean } {
   const errors = events.diagnostics.filter((d) => d.severity === "error");
@@ -35,20 +40,24 @@ export function renderPlan(
   const high = risks.filter((row) => row.level === "high");
   const low = risks.filter((row) => row.level === "low");
   const shownLow = options.full ? low : low.slice(0, LOW_RISK_SHOWN);
-  const rows = [...high, ...shownLow].map((row) => ({
-    address: metadataAddress(row.address),
-    action: row.action,
-    type: row.type ?? "",
-    risk: row.level,
-    flags: row.flags.join(" "),
-    reason: row.action === "unknown" ? "unrecognized action" : row.reason ? reasonCode(row.reason) : "",
-  }));
+  const fields = options.fields ?? (options.full ? FIELDS : FIELDS.slice(0, 4));
+  const rows = [...high, ...shownLow].map((row) => {
+    const detail = {
+      address: metadataAddress(row.address),
+      action: row.action,
+      type: row.type ?? "",
+      risk: row.level,
+      flags: row.flags.join(" "),
+      reason: row.action === "unknown" ? "unrecognized action" : row.reason ? reasonCode(row.reason) : "",
+    };
+    return Object.fromEntries(fields.map((field) => [field, detail[field]]));
+  });
   const report: Record<string, unknown> = { ...options.source };
   if (events.version)
     report.version = events.flavor === "unknown" ? events.version : `${events.flavor} ${events.version}`;
   // Malformed JSON events mean lost output; counted wrapper progress is not an event.
   const complete = events.summary !== "unavailable" && events.malformed === 0;
-  report.status = errors.length ? "error" : complete ? "planned" : "incomplete";
+  report.status = errors.length || options.failed ? "error" : complete ? "planned" : "incomplete";
   report.summary = events.summary;
   report.risk = { high: high.length, low: low.length };
   report.changes = rows.length ? rows : "none";
@@ -63,7 +72,7 @@ export function renderPlan(
   if (events.skippedWrapperOutput) report.skipped_wrapper_lines = events.skippedWrapperOutput;
   if (events.malformed) report.malformed_lines = events.malformed;
   if (events.unknownEvents) report.unknown_events = events.unknownEvents;
-  let ok = errors.length === 0 && complete;
+  let ok = errors.length === 0 && complete && !options.failed;
   if (options.expected) {
     const result = evaluateExpect(options.expected, events);
     report.expect = result.reasons.length
@@ -72,19 +81,27 @@ export function renderPlan(
     if (result.status === "fail") ok = false;
   }
   const help: string[] = [];
-  if (high.length) help.push("Review high-risk rows (destroy, replace, iam, secret, unknown) before anyone applies");
-  if (shownLow.length < low.length && options.module)
-    help.push(`Run \`terraform-axi plan ${shellWord(options.module)} --full\` to list every change`);
-  if (!complete && !errors.length)
-    help.push("The plan output is incomplete; rerun the plan before trusting these rows");
-  if (!options.expected && !errors.length && complete)
-    help.push("Add `--expect add=N,change=N,destroy=N` to assert the planned counts");
+  const invocation =
+    options.invocation ??
+    commandLine([
+      "plan",
+      ...(options.source.plan_json ? ["--plan-json", options.source.plan_json] : [options.module ?? "<module>"]),
+    ]);
+  if (high.length && !options.fields && !options.full)
+    help.push(`Run \`${invocation} --fields address,action,flags,reason\` to inspect high-risk detail`);
+  if (shownLow.length < low.length) help.push(`Run \`${invocation} --full\` to list all ${risks.length} changes`);
+  if (!complete || errors.length || options.failed)
+    help.push(`Check the selected plan input and diagnostics, then rerun \`${invocation}\` before trusting these rows`);
+  if (options.expected && complete && !errors.length && !options.failed && !ok)
+    help.push(`Review the expectation mismatch before retrying \`${invocation}\``);
+  if (!options.expected && !errors.length && complete && !options.failed)
+    help.push(`Run \`${invocation} --expect add=N,change=N,destroy=N\` to assert the planned counts`);
   if (help.length) report.help = help;
   return { report, ok };
 }
 
 export async function planCommand(args: string[], config: Config): Promise<Record<string, unknown>> {
-  const { module, planJson, expected, full, binary, timeout } = parsePlanArgs(args);
+  const { module, planJson, expected, full, binary, timeout, fields, invocation } = parsePlanArgs(args);
   let events: PlanEvents;
   let source: Record<string, string>;
   let stderr = "";
@@ -122,12 +139,15 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
   const rendered = renderPlan(events, {
     source,
     full,
+    failed: exitCode === FAILED_EXIT,
+    ...(fields ? { fields } : {}),
+    invocation,
     ...(expected ? { expected } : {}),
     ...(module ? { module } : {}),
   });
   const { report } = rendered;
   // A failed exit is an error even when the stream looks complete.
-  if (exitCode === FAILED_EXIT && report.status !== "error") {
+  if (exitCode === FAILED_EXIT) {
     report.status = "error";
     report.exit_code = exitCode;
   }
@@ -157,17 +177,22 @@ export function parsePlanArgs(args: string[]): {
   full: boolean;
   binary?: "terraform" | "tofu";
   timeout: number;
+  fields?: Field[];
+  invocation: string;
 } {
-  const full = args.includes("--full");
-  const parsed = parseArgs(
-    args.filter((arg) => arg !== "--full"),
-    [
-      { name: "--expect" },
-      { name: "--plan-json" },
-      { name: "--binary", values: ["terraform", "tofu"] },
-      { name: "--timeout" },
-    ],
-  );
+  const parsed = parseArgs(args, [
+    { name: "--full", boolean: true },
+    { name: "--fields" },
+    { name: "--expect" },
+    { name: "--plan-json" },
+    { name: "--binary", values: ["terraform", "tofu"] },
+    { name: "--timeout" },
+  ]);
+  const full = parsed.values["--full"] !== undefined;
+  const requested = parsed.values["--fields"]?.[0]?.split(",");
+  if (requested && !requested.every(isField))
+    throw new UsageError(`--fields must be selected from ${FIELDS.join(",")}`);
+  const fields = requested?.filter(isField);
   if (parsed.positional.length)
     throw new UsageError(`unexpected plan argument: ${parsed.positional[0]}; usage: ${usage}`);
   const module = parsed.command;
@@ -197,5 +222,11 @@ export function parsePlanArgs(args: string[]): {
     ...(binary ? { binary } : {}),
     full,
     timeout,
+    ...(fields ? { fields } : {}),
+    invocation: commandLine([
+      "plan",
+      ...Object.entries(parsed.values).flatMap(([flag, values]) => (flag === "--full" ? [flag] : [flag, values[0]!])),
+      ...(module ? [module.startsWith("-") ? `./${module}` : module] : []),
+    ]),
   };
 }
