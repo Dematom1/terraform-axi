@@ -51,8 +51,7 @@ export function safeText(text: string): string {
     .filter(Boolean)
     .map((token) => {
       const [, core, punctuation] = /^(.*?)([.,:;!?]*)$/.exec(token)!;
-      return SAFE_TOKEN.test(core!) &&
-        (/^[1-5]\d\d$/.test(core!) || SAFE_WORDS.has(core!.toLowerCase()))
+      return SAFE_TOKEN.test(core!) && (/^[1-5]\d\d$/.test(core!) || SAFE_WORDS.has(core!.toLowerCase()))
         ? `${core}${punctuation}`
         : "…";
     })

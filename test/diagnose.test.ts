@@ -195,7 +195,7 @@ describe("safeText", () => {
     ).toBe("POST … 403 Resource not accessible by integration …");
     expect(safeText(`invalid key ${SECRETS.AKID} for user "acme"`)).toBe("invalid key … for user …");
     expect(safeText("Error: invalid token hunter; HTTP 403")).toBe("Error: invalid token … HTTP 403");
-    expect(safeText(Array.from({ length: 50 }, () => "word").join(" ")).split(" ")).toHaveLength(41);
+    expect(safeText(Array.from({ length: 50 }, () => "error").join(" ")).split(" ")).toHaveLength(41);
   });
 });
 
