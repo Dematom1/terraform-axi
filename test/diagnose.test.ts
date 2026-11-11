@@ -173,7 +173,8 @@ describe("diagnose", () => {
     const bounded = diagnose([path]).data;
     expect(bounded.changes).toHaveLength(25);
     expect(bounded.changes_omitted).toBe(5);
-    expect(bounded.help.join(" ")).toContain(`terraform-axi diagnose ${path} --full`);
+    expect(bounded.help.join(" ")).toContain("terraform-axi diagnose <file|-> --full");
+    expect(bounded.source).toBe("file");
     expect(diagnose([path, "--full"]).data.changes).toHaveLength(30);
     const unknown = diagnose(["-"], "diagnostics withheld\n").data;
     expect(unknown.status).toBe("unrecognized");

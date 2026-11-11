@@ -6,7 +6,7 @@
  * snippets, attribute values, ids, URLs, hosts, and anything quoted are matched against but never printed.
  */
 import { readFileSync } from "node:fs";
-import { commandLine, parseArgs } from "../args.js";
+import { parseArgs } from "../args.js";
 import { CliError, UsageError } from "../errors.js";
 import { explain } from "../doctor/explain.js";
 import {
@@ -78,9 +78,11 @@ function httpStatus(text: string): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
+const IAM_ACTIONS = new Set(`iam:CreateRole iam:DeleteRole iam:GetRole iam:PassRole iam:AttachRolePolicy iam:DetachRolePolicy iam:PutRolePolicy iam:DeleteRolePolicy iam:CreatePolicy iam:DeletePolicy iam:CreatePolicyVersion iam:TagRole iam:CreateUser iam:CreateAccessKey iam:CreateServiceLinkedRole iam:CreateOpenIDConnectProvider iam:GetPolicy iam:ListRolePolicies iam:ListAttachedRolePolicies sts:AssumeRole sts:GetCallerIdentity sts:AssumeRoleWithWebIdentity s3:CreateBucket s3:DeleteBucket s3:PutObject s3:GetObject s3:DeleteObject s3:ListBucket s3:PutBucketPolicy s3:GetBucketPolicy s3:PutBucketVersioning s3:PutEncryptionConfiguration s3:PutBucketTagging s3:PutBucketPublicAccessBlock ec2:RunInstances ec2:TerminateInstances ec2:DescribeInstances ec2:CreateVpc ec2:DeleteVpc ec2:CreateSubnet ec2:CreateSecurityGroup ec2:AuthorizeSecurityGroupIngress ec2:CreateTags ec2:DescribeVpcs ec2:DescribeSubnets ec2:DescribeSecurityGroups kms:CreateKey kms:Decrypt kms:Encrypt kms:GenerateDataKey kms:DescribeKey kms:CreateAlias kms:ScheduleKeyDeletion kms:PutKeyPolicy secretsmanager:CreateSecret secretsmanager:GetSecretValue secretsmanager:PutSecretValue secretsmanager:DeleteSecret secretsmanager:DescribeSecret ssm:GetParameter ssm:PutParameter ssm:DeleteParameter ssm:GetParameters lambda:CreateFunction lambda:UpdateFunctionCode lambda:UpdateFunctionConfiguration lambda:AddPermission lambda:InvokeFunction lambda:GetFunction logs:CreateLogGroup logs:PutRetentionPolicy logs:DescribeLogGroups logs:DeleteLogGroup dynamodb:CreateTable dynamodb:DescribeTable dynamodb:DeleteTable dynamodb:PutItem dynamodb:GetItem route53:ChangeResourceRecordSets route53:CreateHostedZone route53:GetHostedZone route53:ListResourceRecordSets acm:RequestCertificate acm:DescribeCertificate ecr:CreateRepository ecr:GetAuthorizationToken ecs:CreateCluster ecs:CreateService ecs:RegisterTaskDefinition eks:CreateCluster eks:DescribeCluster rds:CreateDBInstance rds:DescribeDBInstances sns:CreateTopic sns:Publish sqs:CreateQueue sqs:SendMessage`.split(" "));
 function missingPermission(text: string): string | undefined {
-  const match = /not authorized to perform:?\s+([a-z][a-z0-9-]{1,40}):((?:[A-Z][a-z0-9]*){1,12})\b/.exec(text);
-  return match ? `${match[1]}:${match[2]}` : undefined;
+  if (!/not authorized to perform:?/.test(text)) return undefined;
+  const action = /not authorized to perform:?\s+([a-z][a-z0-9-]{1,40}:[A-Z][A-Za-z0-9]*)\b/.exec(text)?.[1];
+  return action ? IAM_ACTIONS.has(action) ? action : "unrecognized" : "unrecognized";
 }
 
 // Fixed AWS error codes; any other `api error <Code>:` capture is omitted.
@@ -90,8 +92,8 @@ const AWS_ERROR_CODES = new Set(
   ),
 );
 function errorCode(text: string): string | undefined {
-  const code = /\bapi error ([A-Za-z]{3,60}):/.exec(text)?.[1];
-  return code && AWS_ERROR_CODES.has(code) ? code : undefined;
+  const match = /\bapi error ([A-Za-z]{3,60}):/.exec(text);
+  return match ? AWS_ERROR_CODES.has(match[1]!) ? match[1] : "unrecognized" : undefined;
 }
 
 /** The resource type of a (masked) address, skipping `module.<name>` pairs and a `data.` prefix. */
@@ -99,7 +101,8 @@ function resourceType(address: string): string | undefined {
   const parts = address.replace(/\[[^\]]*\]/g, "").split(".");
   while (parts[0] === "module") parts.splice(0, 2);
   if (parts[0] === "data") parts.shift();
-  return parts.length === 2 ? safeName(parts[0]) : undefined;
+  const type = parts.length === 2 ? parts[0] : undefined;
+  return type && /^[a-z][a-z0-9]{0,23}(?:_[a-z0-9]{1,24}){1,12}$/.test(type) ? type : undefined;
 }
 
 const OPERATION: Partial<Record<PlanAction | "noop", string>> = { DESTROY: "delete", REPLACE: "replace" };
@@ -108,9 +111,9 @@ const operation = (action: PlanAction | "noop") => OPERATION[action] ?? action;
 function failure(diagnostic: PlanDiagnostic | undefined, hook: AppliedResource | undefined) {
   const text = diagnostic ? `${diagnostic.summary}\n${diagnostic.detail ?? ""}` : "";
   const rawAddress = diagnostic?.address ?? hook?.address;
-  const address = rawAddress ? metadataAddress(rawAddress) : undefined;
-  // Type and provider come only from the masked address, so they reveal nothing the address does not.
-  const type = address ? resourceType(address) : undefined;
+  const maskedAddress = rawAddress ? metadataAddress(rawAddress) : undefined;
+  const type = maskedAddress && maskedAddress !== "withheld" ? resourceType(maskedAddress) : undefined;
+  const address = type ? maskedAddress : rawAddress ? "withheld" : undefined;
   const explanation = text ? explain(text) : undefined;
   const row: Record<string, string | number | undefined> = {
     address,
@@ -292,8 +295,9 @@ export function renderDiagnosis(
   report.failures = shown.length ? shown : "none";
   if (shown.length < rows.length) report.failures_omitted = rows.length - shown.length;
   const changes = events.changes.map((change) => {
-    const address = metadataAddress(change.address);
-    return { address, action: operation(change.action), type: resourceType(address) ?? "" };
+    const maskedAddress = metadataAddress(change.address);
+    const type = maskedAddress !== "withheld" ? resourceType(maskedAddress) : undefined;
+    return { address: type ? maskedAddress : "withheld", action: operation(change.action), type: type ?? "" };
   });
   if (changes.length) {
     report.changes = options.full ? changes : changes.slice(0, MAX_ROWS);
@@ -338,15 +342,15 @@ export async function diagnose(args: string[]): Promise<Record<string, unknown>>
     try {
       text = readFileSync(source, "utf8");
     } catch {
-      throw new CliError(`cannot read log file: ${source}`);
+      throw new CliError("cannot read log file");
     }
   }
   const full = parsed.values["--full"] !== undefined;
   const json = text.split(/\r?\n/).some(isEventLine);
   return renderDiagnosis(json ? parsePlanEvents(text, true) : parseTextLog(text), {
-    source: source === "-" ? "stdin" : source,
+    source: source === "-" ? "stdin" : "file",
     input: json ? "json" : "text",
     full,
-    invocation: commandLine(["diagnose", source]),
+    invocation: "terraform-axi diagnose <file|->",
   });
 }
