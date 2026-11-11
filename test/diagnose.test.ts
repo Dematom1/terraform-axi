@@ -211,7 +211,7 @@ describe("diagnose", () => {
     expect(stdout).not.toContain(lowercaseToken);
     expect(stdout).not.toContain("SecretPasswordValue");
     expect(data.failures[0]).toMatchObject({ provider: "aws", type: "aws_iam_role", operation: "create" });
-    expect(data.failures[0]).not.toHaveProperty("error_code");
+    expect(data.failures[0]).toHaveProperty("error_code", "unrecognized");
   });
 });
 

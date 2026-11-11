@@ -34,11 +34,8 @@ const SAFE_WORDS = new Set(
   ),
 );
 const SAFE_TOKEN = /^(?:[a-z][a-z0-9-]*|[1-5]\d\d)$/i;
-const NAME = /^[a-z][a-z0-9_-]{0,63}$/;
 // oxlint-disable-next-line no-control-regex -- strips ANSI color escapes from captured terminal logs
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
-
-const safeName = (value: string | undefined) => (value && NAME.test(value) ? value : undefined);
 
 /** Keeps only plain words from provider text; everything else, including quoted or bracketed text, is `…`. */
 export function safeText(text: string): string {
@@ -78,11 +75,15 @@ function httpStatus(text: string): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
-const IAM_ACTIONS = new Set(`iam:CreateRole iam:DeleteRole iam:GetRole iam:PassRole iam:AttachRolePolicy iam:DetachRolePolicy iam:PutRolePolicy iam:DeleteRolePolicy iam:CreatePolicy iam:DeletePolicy iam:CreatePolicyVersion iam:TagRole iam:CreateUser iam:CreateAccessKey iam:CreateServiceLinkedRole iam:CreateOpenIDConnectProvider iam:GetPolicy iam:ListRolePolicies iam:ListAttachedRolePolicies sts:AssumeRole sts:GetCallerIdentity sts:AssumeRoleWithWebIdentity s3:CreateBucket s3:DeleteBucket s3:PutObject s3:GetObject s3:DeleteObject s3:ListBucket s3:PutBucketPolicy s3:GetBucketPolicy s3:PutBucketVersioning s3:PutEncryptionConfiguration s3:PutBucketTagging s3:PutBucketPublicAccessBlock ec2:RunInstances ec2:TerminateInstances ec2:DescribeInstances ec2:CreateVpc ec2:DeleteVpc ec2:CreateSubnet ec2:CreateSecurityGroup ec2:AuthorizeSecurityGroupIngress ec2:CreateTags ec2:DescribeVpcs ec2:DescribeSubnets ec2:DescribeSecurityGroups kms:CreateKey kms:Decrypt kms:Encrypt kms:GenerateDataKey kms:DescribeKey kms:CreateAlias kms:ScheduleKeyDeletion kms:PutKeyPolicy secretsmanager:CreateSecret secretsmanager:GetSecretValue secretsmanager:PutSecretValue secretsmanager:DeleteSecret secretsmanager:DescribeSecret ssm:GetParameter ssm:PutParameter ssm:DeleteParameter ssm:GetParameters lambda:CreateFunction lambda:UpdateFunctionCode lambda:UpdateFunctionConfiguration lambda:AddPermission lambda:InvokeFunction lambda:GetFunction logs:CreateLogGroup logs:PutRetentionPolicy logs:DescribeLogGroups logs:DeleteLogGroup dynamodb:CreateTable dynamodb:DescribeTable dynamodb:DeleteTable dynamodb:PutItem dynamodb:GetItem route53:ChangeResourceRecordSets route53:CreateHostedZone route53:GetHostedZone route53:ListResourceRecordSets acm:RequestCertificate acm:DescribeCertificate ecr:CreateRepository ecr:GetAuthorizationToken ecs:CreateCluster ecs:CreateService ecs:RegisterTaskDefinition eks:CreateCluster eks:DescribeCluster rds:CreateDBInstance rds:DescribeDBInstances sns:CreateTopic sns:Publish sqs:CreateQueue sqs:SendMessage`.split(" "));
+const IAM_ACTIONS = new Set(
+  `iam:CreateRole iam:DeleteRole iam:GetRole iam:PassRole iam:AttachRolePolicy iam:DetachRolePolicy iam:PutRolePolicy iam:DeleteRolePolicy iam:CreatePolicy iam:DeletePolicy iam:CreatePolicyVersion iam:TagRole iam:CreateUser iam:CreateAccessKey iam:CreateServiceLinkedRole iam:CreateOpenIDConnectProvider iam:GetPolicy iam:ListRolePolicies iam:ListAttachedRolePolicies sts:AssumeRole sts:GetCallerIdentity sts:AssumeRoleWithWebIdentity s3:CreateBucket s3:DeleteBucket s3:PutObject s3:GetObject s3:DeleteObject s3:ListBucket s3:PutBucketPolicy s3:GetBucketPolicy s3:PutBucketVersioning s3:PutEncryptionConfiguration s3:PutBucketTagging s3:PutBucketPublicAccessBlock ec2:RunInstances ec2:TerminateInstances ec2:DescribeInstances ec2:CreateVpc ec2:DeleteVpc ec2:CreateSubnet ec2:CreateSecurityGroup ec2:AuthorizeSecurityGroupIngress ec2:CreateTags ec2:DescribeVpcs ec2:DescribeSubnets ec2:DescribeSecurityGroups kms:CreateKey kms:Decrypt kms:Encrypt kms:GenerateDataKey kms:DescribeKey kms:CreateAlias kms:ScheduleKeyDeletion kms:PutKeyPolicy secretsmanager:CreateSecret secretsmanager:GetSecretValue secretsmanager:PutSecretValue secretsmanager:DeleteSecret secretsmanager:DescribeSecret ssm:GetParameter ssm:PutParameter ssm:DeleteParameter ssm:GetParameters lambda:CreateFunction lambda:UpdateFunctionCode lambda:UpdateFunctionConfiguration lambda:AddPermission lambda:InvokeFunction lambda:GetFunction logs:CreateLogGroup logs:PutRetentionPolicy logs:DescribeLogGroups logs:DeleteLogGroup dynamodb:CreateTable dynamodb:DescribeTable dynamodb:DeleteTable dynamodb:PutItem dynamodb:GetItem route53:ChangeResourceRecordSets route53:CreateHostedZone route53:GetHostedZone route53:ListResourceRecordSets acm:RequestCertificate acm:DescribeCertificate ecr:CreateRepository ecr:GetAuthorizationToken ecs:CreateCluster ecs:CreateService ecs:RegisterTaskDefinition eks:CreateCluster eks:DescribeCluster rds:CreateDBInstance rds:DescribeDBInstances sns:CreateTopic sns:Publish sqs:CreateQueue sqs:SendMessage`.split(
+    " ",
+  ),
+);
 function missingPermission(text: string): string | undefined {
   if (!/not authorized to perform:?/.test(text)) return undefined;
   const action = /not authorized to perform:?\s+([a-z][a-z0-9-]{1,40}:[A-Z][A-Za-z0-9]*)\b/.exec(text)?.[1];
-  return action ? IAM_ACTIONS.has(action) ? action : "unrecognized" : "unrecognized";
+  return action ? (IAM_ACTIONS.has(action) ? action : "unrecognized") : "unrecognized";
 }
 
 // Fixed AWS error codes; any other `api error <Code>:` capture is omitted.
@@ -93,7 +94,7 @@ const AWS_ERROR_CODES = new Set(
 );
 function errorCode(text: string): string | undefined {
   const match = /\bapi error ([A-Za-z]{3,60}):/.exec(text);
-  return match ? AWS_ERROR_CODES.has(match[1]!) ? match[1] : "unrecognized" : undefined;
+  return match ? (AWS_ERROR_CODES.has(match[1]!) ? match[1] : "unrecognized") : undefined;
 }
 
 /** The resource type of a (masked) address, skipping `module.<name>` pairs and a `data.` prefix. */
