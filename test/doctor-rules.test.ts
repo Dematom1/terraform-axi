@@ -78,6 +78,14 @@ describe("doctor credential rules", () => {
       ["connection refused", "unreachable"],
       ["endpoint request timed out", "unreachable"],
       ["unsupported x-amz-checksum-sha256 header", "checksum header"],
+      ["GET https://api.github.com/user: 401 Bad credentials []", "invalid, expired, or revoked"],
+      ["POST https://api.github.com/enterprises/x/actions/runner-groups: 404 Not Found []", "enterprise request"],
+      ["POST https://api.github.com/orgs/x/actions/runner-groups: 403 Forbidden []", "runner group"],
+      ["PUT https://api.github.com/orgs/x/teams/y: 403 Resource not accessible by integration []", "GitHub App"],
+      ["GET https://api.github.com/orgs/x/hooks: 404 Not Found []", "organization request"],
+      ["PUT https://api.github.com/repos/x/y/branches/main/protection: 404 Not Found []", "repository request"],
+      ["api error AccessDenied: User: u is not authorized to perform: iam:CreateRole", "IAM permission"],
+      ["api error ExpiredToken: The security token included in the request is expired", "expired"],
     ];
     for (const [text, cause] of fixtures) expect(explain(text)?.cause).toContain(cause);
     expect(explain("Error acquiring the state lock: timeout after 30s")).toBeUndefined();

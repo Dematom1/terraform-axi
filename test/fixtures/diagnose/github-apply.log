@@ -1,0 +1,33 @@
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # github_actions_organization_secret.ci["@@HEX@@"] will be created
+  + resource "github_actions_organization_secret" "ci" {
+      + plaintext_value = "@@GHP@@"
+      + secret_name     = "@@LETTERS@@"
+    }
+
+  # github_actions_runner_group.ci will be created
+  + resource "github_actions_runner_group" "ci" {
+      + name  = "ci"
+      + token = "@@PAT@@"
+    }
+
+Plan: 2 to add, 0 to change, 0 to destroy.
+GITHUB_TOKEN=@@GHO@@ AWS_ACCESS_KEY_ID=@@AKID@@ AWS_SECRET_ACCESS_KEY=@@AWS_SECRET@@
+github_actions_organization_secret.ci["@@HEX@@"]: Creating...
+github_actions_organization_secret.ci["@@HEX@@"]: Creation complete after 1s [id=@@GHO@@]
+github_actions_runner_group.ci: Creating...
+╷
+│ Error: POST https://@@GHP@@@api.github.com/orgs/example-org/actions/runner-groups: 403 Must have admin rights to Repository. token @@JWT@@ @@ACCOUNT@@
+│ 
+│   with github_actions_runner_group.ci,
+│   on main.tf line 12, in resource "github_actions_runner_group" "ci":
+│   12: resource "github_actions_runner_group" "ci" {
+│ 
+│ key material:
+@@PEM@@
+╵

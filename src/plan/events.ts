@@ -13,6 +13,14 @@ export type PlanChange = { address: string; action: PlanAction; type?: string; r
 export type PlanOutput = { name: string; action: PlanAction | "noop"; sensitive: boolean; raw?: string };
 export type PlanSummary = { add: number; change: number; destroy: number; import?: number; forget?: number };
 export type PlanDiagnostic = { severity: string; summary: string; detail?: string; address?: string };
+/** One `apply_complete` or `apply_errored` hook. `id_value` and every other attribute are never read. */
+export type AppliedResource = {
+  address: string;
+  action: PlanAction | "noop";
+  outcome: "complete" | "errored";
+  type?: string;
+  provider?: string;
+};
 export type PlanEvents = {
   flavor: "terraform" | "tofu" | "unknown";
   version?: string;
@@ -22,6 +30,10 @@ export type PlanEvents = {
   summary: PlanSummary | "unavailable";
   outputs: PlanOutput[];
   diagnostics: PlanDiagnostic[];
+  /** Apply hooks, present only when the stream came from `apply -json`. */
+  applied?: AppliedResource[];
+  /** The `change_summary` whose `operation` is `apply`; `summary` keeps the plan's. */
+  applySummary?: PlanSummary | "unavailable";
   /** Lines that are not a JSON event object. Only the count is kept, never the content. */
   malformed: number;
   /** Non-JSON wrapper progress lines; contents are never retained. */
@@ -48,7 +60,8 @@ const SINGLE = new Map<string, PlanAction | "noop">([
   ["forget", "forget"],
 ]);
 // Progress events that carry nothing a plan summary needs.
-const PROGRESS = /^(?:log|refresh_start|refresh_complete|apply_\w+|provision_\w+|ephemeral_\w+|action_\w+)$/;
+const PROGRESS =
+  /^(?:log|refresh_start|refresh_complete|apply_start|apply_progress|provision_\w+|ephemeral_\w+|action_\w+)$/;
 
 const isRecord = (value: unknown): value is Json =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -188,8 +201,31 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
         break;
       }
       case "change_summary":
-        result.summary = decodeSummary(event.changes);
+        if (isRecord(event.changes) && event.changes.operation === "apply")
+          result.applySummary = decodeSummary(event.changes);
+        else result.summary = decodeSummary(event.changes);
         break;
+      case "apply_complete":
+      case "apply_errored": {
+        const hook = isRecord(event.hook) ? event.hook : {};
+        const resource = isRecord(hook.resource) ? hook.resource : {};
+        const address = str(resource.addr);
+        if (!address) {
+          result.malformed++;
+          break;
+        }
+        const row: AppliedResource = {
+          address,
+          action: decodeAction(hook).action,
+          outcome: event.type === "apply_errored" ? "errored" : "complete",
+        };
+        const type = str(resource.resource_type);
+        if (type) row.type = type;
+        const provider = str(resource.implied_provider);
+        if (provider) row.provider = provider;
+        (result.applied ??= []).push(row);
+        break;
+      }
       case "outputs":
         if (!isRecord(event.outputs)) {
           result.malformed++;
