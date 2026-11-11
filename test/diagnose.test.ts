@@ -289,6 +289,23 @@ describe("diagnose metadata slots", () => {
       missing_permission: "iam:CreateRole",
     });
   });
+
+  // Accepted residual: types are not allowlisted one by one. Terraform rejects types outside the provider
+  // schema, so a genuine stream cannot carry a secret there; only the provider prefix and grammar are checked.
+  it.each([
+    ["aws_ab12cd34_ef56gh78", "aws_ab12cd34_ef56gh78.x"],
+    ["ghp_ab12cd34_ef56gh78", "withheld"],
+    [`aws_${"a".repeat(25)}`, "withheld"],
+    ["AWS_Iam_Role", "withheld"],
+  ])("pins the type residual: %s prints as %s", (type, address) => {
+    const stream = JSON.stringify({
+      type: "planned_change",
+      change: { resource: { addr: `${type}.x` }, action: "create" },
+    });
+    expect(diagnose(["-"], stream).data.changes).toEqual([
+      { address, action: "create", type: address === "withheld" ? "" : type },
+    ]);
+  });
 });
 
 describe("safeText", () => {
