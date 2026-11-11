@@ -40,7 +40,7 @@ function integrations(resolveDirectory: (sessionID: string) => Promise<string | 
       const input = event.input ?? event.args;
       if (!input || typeof input !== "object" || !("command" in input) || typeof input.command !== "string") return;
       const summary = commands.get(event.sessionID) ?? {};
-      for (const match of input.command.matchAll(/\bterraform-axi\s+(plan|drift|lint|doctor|state|setup)\b/g))
+      for (const match of input.command.matchAll(/\bterraform-axi\s+(plan|drift|lint|diagnose|doctor|state|setup)\b/g))
         summary[match[1]!] = (summary[match[1]!] ?? 0) + 1;
       commands.set(event.sessionID, summary);
     },

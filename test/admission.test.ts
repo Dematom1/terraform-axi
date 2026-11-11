@@ -131,7 +131,7 @@ it.each([
   expect(JSON.stringify(result.data.help)).not.toContain("permissions");
   expect(existsSync(join(home, ".config"))).toBe(false);
 });
-it.each(["plan", "drift", "lint", "doctor", "setup"])(
+it.each(["plan", "drift", "lint", "diagnose", "doctor", "setup"])(
   "3/5: %s unknown flags inline valid flags and relevant help",
   (command) => {
     const result = cli([command, "--bogus=do-not-print"]);
@@ -142,7 +142,7 @@ it.each(["plan", "drift", "lint", "doctor", "setup"])(
     expect(result.data.help.join(" ")).not.toContain("permissions");
   },
 );
-it.each(["plan", "drift", "lint", "doctor", "state", "setup", "update"])(
+it.each(["plan", "drift", "lint", "diagnose", "doctor", "state", "setup", "update"])(
   "3: %s accepts help alongside input without invoking dependencies or writing",
   (command) => {
     expect(cli([command, "nonexistent", "--help"]).status).toBe(0);
@@ -208,7 +208,7 @@ it("3/6: built-in update rejects bad input with usage status and inlines all sup
   expect(result.data.help.join(" ")).toContain("--dry-run");
   expect(existsSync(join(home, ".config"))).toBe(false);
 });
-it.each(["plan", "drift", "lint", "doctor", "state", "setup", "update"])(
+it.each(["plan", "drift", "lint", "diagnose", "doctor", "state", "setup", "update"])(
   "6: %s help has defaults and at least two examples",
   (command) => {
     const report = cli([command, "--help"]).data;

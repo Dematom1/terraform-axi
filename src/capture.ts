@@ -15,7 +15,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isSessionId } from "./sessions.js";
 
-const COMMANDS = ["plan", "drift", "lint", "doctor", "state", "setup"];
+const COMMANDS = ["plan", "drift", "lint", "diagnose", "doctor", "state", "setup"];
 const MAX_TRANSCRIPT_BYTES = 1_000_000;
 const object = (value: unknown): Record<string, unknown> | undefined =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? { ...value } : undefined;
@@ -99,7 +99,7 @@ export function captureSession(input: unknown): void {
         const tool = object(args);
         const command = tool?.command ?? tool?.cmd;
         if (typeof command === "string") {
-          for (const match of command.matchAll(/\bterraform-axi\s+(plan|drift|lint|doctor|state|setup)\b/g)) {
+          for (const match of command.matchAll(/\bterraform-axi\s+(plan|drift|lint|diagnose|doctor|state|setup)\b/g)) {
             const name = match[1]!;
             commands[name] = (commands[name] ?? 0) + 1;
           }

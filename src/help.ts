@@ -1,6 +1,7 @@
 import { PLAN_ARGS, usage as planUsage } from "./plan/command.js";
 import { DRIFT_ARGS, driftUsage } from "./commands/drift.js";
 import { lintUsage } from "./commands/lint.js";
+import { diagnoseUsage } from "./commands/diagnose.js";
 
 /** Shared by --help and usage errors so the correction is available in one response. */
 export function commandHelp(
@@ -59,6 +60,23 @@ export function commandHelp(
         runs: "fmt -check; validate -json only with a data directory; tflint if installed",
         never: "init or format writes",
         examples: ["terraform-axi lint infra/prod", "terraform-axi lint . --binary tofu"],
+      };
+    case "diagnose":
+      return {
+        usage: diagnoseUsage,
+        flags: ["-: read the log from stdin", "--full: all failure and planned-change rows", universal],
+        defaults:
+          "first 25 failures and planned changes; JSON event stream when any line is a Terraform event, else plain text",
+        reads: "a saved `plan -json` or `apply -json` stream (stdout), or a plain-text log best effort",
+        output:
+          "address, provider, type, operation, HTTP status, request path shape, AWS error code and denied action, plain-word summary, fixed-text hint",
+        never:
+          "attribute values, ids, diagnostic detail or snippets, URLs, hosts, quoted text, env; no Terraform run, state access, or network",
+        examples: [
+          "terraform apply -json plan.tfplan > apply.jsonl; terraform-axi diagnose apply.jsonl",
+          "terraform-axi diagnose - < apply.jsonl",
+          "terraform-axi diagnose apply.log --full",
+        ],
       };
     case "doctor":
       return {
