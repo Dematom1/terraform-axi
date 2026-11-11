@@ -141,9 +141,7 @@ const REASON_CODES = new Set([
 /** Unknown reason/action text and for_each keys can contain provider-sensitive values. */
 export const reasonCode = (reason: string | undefined) => (reason && REASON_CODES.has(reason) ? reason : "unknown");
 export function metadataAddress(address: string): string {
-  const masked = address
-    .replace(/\["(?:[^"\\]|\\.)*"\]/g, '["withheld"]')
-    .replace(/\[(\d{5,})\]/g, '["withheld"]');
+  const masked = address.replace(/\["(?:[^"\\]|\\.)*"\]/g, '["withheld"]').replace(/\[(\d{5,})\]/g, '["withheld"]');
   return /^(?:[\w-]+(?:\[(?:\d+|"withheld")\])?)(?:\.[\w-]+(?:\[(?:\d+|"withheld")\])?)*$/.test(masked)
     ? masked
     : "withheld";
