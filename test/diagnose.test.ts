@@ -199,6 +199,15 @@ describe("safeText", () => {
   });
 });
 
+it("omits invalid version values while retaining valid Terraform versions", () => {
+  const leaked = parsePlanEvents(JSON.stringify({ type: "version", terraform: SECRETS.GHP }));
+  expect(leaked.flavor).toBe("terraform");
+  expect(leaked.version).toBeUndefined();
+  const valid = parsePlanEvents(JSON.stringify({ type: "version", terraform: "1.15.8" }));
+  expect(valid.flavor).toBe("terraform");
+  expect(valid.version).toBe("1.15.8");
+});
+
 it("keeps the plan summary separate from an apply summary", () => {
   const events = parsePlanEvents(
     [

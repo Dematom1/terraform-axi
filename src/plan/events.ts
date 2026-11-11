@@ -184,8 +184,11 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
       case "version": {
         const tofu = str(event.tofu);
         const terraform = str(event.terraform);
-        if (tofu) [result.flavor, result.version] = ["tofu", tofu];
-        else if (terraform) [result.flavor, result.version] = ["terraform", terraform];
+        const version = tofu ?? terraform;
+        if (tofu) result.flavor = "tofu";
+        else if (terraform) result.flavor = "terraform";
+        if (version && /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,32})?$/.test(version))
+          result.version = version;
         break;
       }
       case "planned_change":
