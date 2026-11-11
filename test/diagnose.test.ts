@@ -215,6 +215,82 @@ describe("diagnose", () => {
   });
 });
 
+describe("diagnose metadata slots", () => {
+  // Fresh values that fit each slot's capture shape, so only the allowlists can keep them out.
+  const slot = {
+    code: `Secret${pick(UPPER + LOWER, 20)}`,
+    action: `iam:Sec${pick(B62, 24)}`,
+    grammarType: `ghp_${pick(LOWER + DIGITS, 20)}_${pick(LOWER + DIGITS, 16)}`,
+    knownPrefixType: `aws_${pick(LOWER + DIGITS, 36)}`,
+  };
+  const leaks = (output: string) =>
+    Object.values(slot).flatMap((secret) =>
+      Array.from({ length: secret.length - 11 }, (_, start) => secret.slice(start, start + 12)).filter((window) =>
+        output.includes(window),
+      ),
+    );
+  const summary = `operation error IAM: CreateRole, api error ${slot.code}: User: u is not authorized to perform: ${slot.action} on resource`;
+  const json = [
+    {
+      type: "planned_change",
+      change: {
+        resource: { addr: `${slot.knownPrefixType}.x`, resource_type: slot.knownPrefixType },
+        action: "create",
+      },
+    },
+    {
+      type: "apply_errored",
+      hook: {
+        resource: { addr: `${slot.grammarType}.ci`, implied_provider: slot.code, resource_type: slot.grammarType },
+        action: "create",
+      },
+    },
+    { type: "diagnostic", diagnostic: { severity: "error", summary, address: `${slot.grammarType}.ci` } },
+  ]
+    .map((event) => JSON.stringify(event))
+    .join("\n");
+  const text = [
+    `  # ${slot.knownPrefixType}.x will be created`,
+    "Plan: 1 to add, 0 to change, 0 to destroy.",
+    `${slot.grammarType}.ci: Creating...`,
+    "╷",
+    `│ Error: ${summary}`,
+    "│ ",
+    `│   with ${slot.grammarType}.ci,`,
+    "╵",
+  ].join("\n");
+
+  it.each([
+    ["json", json],
+    ["text", text],
+  ])("withholds secrets in the error-code, permission, provider, and type slots from %s input", (input, log) => {
+    const { stdout, data } = diagnose(["-"], log);
+    expect(data.input).toBe(input);
+    expect(leaks(stdout)).toEqual([]);
+    const row = data.failures[0]!;
+    expect(row).toMatchObject({ address: "withheld", error_code: "unrecognized", missing_permission: "unrecognized" });
+    expect(row).not.toHaveProperty("type");
+    expect(row).not.toHaveProperty("provider");
+    expect(data.changes).toEqual([{ address: "withheld", action: "create", type: "" }]);
+  });
+
+  it("still prints listed codes, actions, and known provider types", () => {
+    const known = json
+      .replaceAll(slot.code, "AccessDenied")
+      .replaceAll(slot.action, "iam:CreateRole")
+      .replaceAll(slot.grammarType, "aws_iam_role")
+      .replaceAll(slot.knownPrefixType, "github_actions_runner_group");
+    const row = diagnose(["-"], known).data.failures[0]!;
+    expect(row).toMatchObject({
+      address: "aws_iam_role.ci",
+      provider: "aws",
+      type: "aws_iam_role",
+      error_code: "AccessDenied",
+      missing_permission: "iam:CreateRole",
+    });
+  });
+});
+
 describe("safeText", () => {
   it("keeps plain words and statuses and drops quoted, bracketed, URL, and token-shaped text", () => {
     expect(

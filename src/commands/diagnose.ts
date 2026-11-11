@@ -86,7 +86,7 @@ function missingPermission(text: string): string | undefined {
   return action ? (IAM_ACTIONS.has(action) ? action : "unrecognized") : "unrecognized";
 }
 
-// Fixed AWS error codes; any other `api error <Code>:` capture is omitted.
+// Fixed AWS error codes; any other `api error <Code>:` capture prints as `unrecognized`.
 const AWS_ERROR_CODES = new Set(
   "AccessDenied AccessDeniedException UnauthorizedOperation UnauthorizedAccess AuthFailure ExpiredToken ExpiredTokenException RequestExpired InvalidClientTokenId InvalidAccessKeyId SignatureDoesNotMatch Throttling ThrottlingException RequestLimitExceeded LimitExceeded LimitExceededException ServiceQuotaExceededException NoSuchEntity NoSuchBucket EntityAlreadyExists ResourceNotFoundException ResourceInUseException ValidationError ValidationException InvalidParameterValue InvalidParameterCombination MalformedPolicyDocument DependencyViolation OptInRequired".split(
     " ",
@@ -97,13 +97,23 @@ function errorCode(text: string): string | undefined {
   return match ? (AWS_ERROR_CODES.has(match[1]!) ? match[1] : "unrecognized") : undefined;
 }
 
+// Known provider names; a type with any other prefix withholds its address. Grammar alone admits token shapes.
+const PROVIDERS = new Set(
+  "terraform aws awscc google azurerm azuread azuredevops kubernetes helm kubectl github gitlab bitbucket cloudflare datadog newrelic grafana pagerduty opsgenie sentry vault consul nomad boundary tfe hcp random tls null local http time archive external cloudinit b2 digitalocean linode hcloud oci alicloud ibm vsphere docker okta auth0 snowflake databricks mongodbatlas fastly akamai heroku vercel netlify postgresql mysql rabbitmq kafka confluent elasticstack ec argocd flux onepassword doppler tailscale ns1 dnsimple acme sops port".split(
+    " ",
+  ),
+);
 /** The resource type of a (masked) address, skipping `module.<name>` pairs and a `data.` prefix. */
 function resourceType(address: string): string | undefined {
   const parts = address.replace(/\[[^\]]*\]/g, "").split(".");
   while (parts[0] === "module") parts.splice(0, 2);
   if (parts[0] === "data") parts.shift();
   const type = parts.length === 2 ? parts[0] : undefined;
-  return type && /^[a-z][a-z0-9]{0,23}(?:_[a-z0-9]{1,24}){1,12}$/.test(type) ? type : undefined;
+  return type &&
+    /^[a-z][a-z0-9]{0,23}(?:_[a-z0-9]{1,24}){1,12}$/.test(type) &&
+    PROVIDERS.has(type.slice(0, type.indexOf("_")))
+    ? type
+    : undefined;
 }
 
 const OPERATION: Partial<Record<PlanAction | "noop", string>> = { DESTROY: "delete", REPLACE: "replace" };
