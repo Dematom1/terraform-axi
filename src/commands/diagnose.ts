@@ -29,8 +29,12 @@ const PATH_WORDS = new Set(
     " ",
   ),
 );
-// One plain word: lowercase, Capitalized, short ACRONYM, CamelCase, or an HTTP status; optional hyphenated parts.
-const WORD = /^(?:[A-Za-z][a-z]{0,17}|[A-Z]{2,6}|(?:[A-Z][a-z]{1,17}){2,4}|[1-5]\d\d)(?:-[a-z]{1,18})*$/;
+const SAFE_WORDS = new Set(
+  "error creating updating deleting reading resource not found accessible by integration must have admin rights to repository organization permission denied forbidden unauthorized bad credentials invalid token scope operation response status code api user is authorized perform on with key request the a of for in provisioner local-exec reference undeclared deprecated argument iam get post put patch delete head http terraform open tofu github aws action actions runner group groups".split(
+    " ",
+  ),
+);
+const SAFE_TOKEN = /^(?:[a-z][a-z0-9-]*|[1-5]\d\d)$/i;
 const NAME = /^[a-z][a-z0-9_-]{0,63}$/;
 // oxlint-disable-next-line no-control-regex -- strips ANSI color escapes from captured terminal logs
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
@@ -47,7 +51,10 @@ export function safeText(text: string): string {
     .filter(Boolean)
     .map((token) => {
       const [, core, punctuation] = /^(.*?)([.,:;!?]*)$/.exec(token)!;
-      return WORD.test(core!) ? `${core}${punctuation}` : "…";
+      return SAFE_TOKEN.test(core!) &&
+        (/^[1-5]\d\d$/.test(core!) || SAFE_WORDS.has(core!.toLowerCase()))
+        ? `${core}${punctuation}`
+        : "…";
     })
     .filter((word, index, all) => word !== "…" || all[index - 1] !== "…");
   return words.length > MAX_WORDS ? `${words.slice(0, MAX_WORDS).join(" ")} …` : words.join(" ");
