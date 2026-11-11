@@ -14,7 +14,6 @@ import {
   parsePlanEvents,
   type AppliedResource,
   type PlanAction,
-  type PlanChange,
   type PlanDiagnostic,
   type PlanEvents,
 } from "../plan/events.js";
@@ -84,7 +83,16 @@ function missingPermission(text: string): string | undefined {
   return match ? `${match[1]}:${match[2]}` : undefined;
 }
 
-const errorCode = (text: string) => /\bapi error ([A-Z][A-Za-z]{2,60}):/.exec(text)?.[1];
+// Fixed AWS error codes; any other `api error <Code>:` capture is omitted.
+const AWS_ERROR_CODES = new Set(
+  "AccessDenied AccessDeniedException UnauthorizedOperation UnauthorizedAccess AuthFailure ExpiredToken ExpiredTokenException RequestExpired InvalidClientTokenId InvalidAccessKeyId SignatureDoesNotMatch Throttling ThrottlingException RequestLimitExceeded LimitExceeded LimitExceededException ServiceQuotaExceededException NoSuchEntity NoSuchBucket EntityAlreadyExists ResourceNotFoundException ResourceInUseException ValidationError ValidationException InvalidParameterValue InvalidParameterCombination MalformedPolicyDocument DependencyViolation OptInRequired".split(
+    " ",
+  ),
+);
+function errorCode(text: string): string | undefined {
+  const code = /\bapi error ([A-Za-z]{3,60}):/.exec(text)?.[1];
+  return code && AWS_ERROR_CODES.has(code) ? code : undefined;
+}
 
 /** The resource type of a (masked) address, skipping `module.<name>` pairs and a `data.` prefix. */
 function resourceType(address: string): string | undefined {
@@ -101,11 +109,12 @@ function failure(diagnostic: PlanDiagnostic | undefined, hook: AppliedResource |
   const text = diagnostic ? `${diagnostic.summary}\n${diagnostic.detail ?? ""}` : "";
   const rawAddress = diagnostic?.address ?? hook?.address;
   const address = rawAddress ? metadataAddress(rawAddress) : undefined;
-  const type = safeName(hook?.type) ?? (address ? resourceType(address) : undefined);
+  // Type and provider come only from the masked address, so they reveal nothing the address does not.
+  const type = address ? resourceType(address) : undefined;
   const explanation = text ? explain(text) : undefined;
   const row: Record<string, string | number | undefined> = {
     address,
-    provider: safeName(hook?.provider) ?? type?.split("_")[0],
+    provider: type?.split("_")[0],
     type,
     operation: hook ? operation(hook.action) : undefined,
     http_status: httpStatus(text),
@@ -187,10 +196,7 @@ export function parseTextLog(text: string): PlanEvents {
         raw,
       );
     if (planned) {
-      const row: PlanChange = { address: planned[1]!, action: TEXT_ACTIONS[planned[2]!]! };
-      const type = resourceType(metadataAddress(row.address));
-      if (type) row.type = type;
-      events.changes.push(row);
+      events.changes.push({ address: planned[1]!, action: TEXT_ACTIONS[planned[2]!]! });
       continue;
     }
     const begun = /^(\S.*?): (Creating|Modifying|Destroying)\.\.\./.exec(raw);
@@ -285,11 +291,10 @@ export function renderDiagnosis(
   const shown = options.full ? rows : rows.slice(0, MAX_ROWS);
   report.failures = shown.length ? shown : "none";
   if (shown.length < rows.length) report.failures_omitted = rows.length - shown.length;
-  const changes = events.changes.map((change) => ({
-    address: metadataAddress(change.address),
-    action: operation(change.action),
-    type: safeName(change.type) ?? "",
-  }));
+  const changes = events.changes.map((change) => {
+    const address = metadataAddress(change.address);
+    return { address, action: operation(change.action), type: resourceType(address) ?? "" };
+  });
   if (changes.length) {
     report.changes = options.full ? changes : changes.slice(0, MAX_ROWS);
     if (!options.full && changes.length > MAX_ROWS) report.changes_omitted = changes.length - MAX_ROWS;

@@ -186,6 +186,32 @@ describe("diagnose", () => {
     expect(diagnose(["-", "--bogus"]).status).toBe(2);
     expect(diagnose([join(home, "missing.jsonl")]).status).toBe(1);
   });
+
+  it("derives provider and type only from the masked address and prints only known AWS error codes", () => {
+    const lowercaseToken = `ghp_${pick(LOWER + DIGITS, 36)}`;
+    const hook = {
+      resource: { addr: "aws_iam_role.deploy", implied_provider: lowercaseToken, resource_type: lowercaseToken },
+      action: "create",
+    };
+    const stream = [
+      { type: "apply_errored", hook },
+      {
+        type: "diagnostic",
+        diagnostic: {
+          severity: "error",
+          summary: "operation error IAM: CreateRole, api error SecretPasswordValue: denied",
+          address: "aws_iam_role.deploy",
+        },
+      },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n");
+    const { stdout, data } = diagnose(["-"], stream);
+    expect(stdout).not.toContain(lowercaseToken);
+    expect(stdout).not.toContain("SecretPasswordValue");
+    expect(data.failures[0]).toMatchObject({ provider: "aws", type: "aws_iam_role", operation: "create" });
+    expect(data.failures[0]).not.toHaveProperty("error_code");
+  });
 });
 
 describe("safeText", () => {
