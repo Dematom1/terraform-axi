@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.5...terraform-axi-v0.1.6) (2026-11-11)
+
+
+### Features
+
+* **cli:** add redacted Terraform diagnostics ([#34](https://github.com/Dematom1/terraform-axi/issues/34)) ([ef5ca43](https://github.com/Dematom1/terraform-axi/commit/ef5ca437b75204fb7450ab66b28dbaf1bd8f073d))
+
 ## [0.1.5](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.4...terraform-axi-v0.1.5) (2026-11-09)
 
 
