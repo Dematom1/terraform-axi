@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { decode } from "@toon-format/toon";
 import { afterAll, describe, expect, it } from "vitest";
 import { safeText } from "../src/commands/diagnose.js";
-import { parsePlanEvents } from "../src/plan/events.js";
+import { metadataAddress, parsePlanEvents } from "../src/plan/events.js";
 
 const cli = join(import.meta.dirname, "..", "dist", "bin", "terraform-axi.js");
 const home = mkdtempSync(join(tmpdir(), "tfaxi-diagnose-"));
@@ -309,6 +309,14 @@ it("omits invalid version values while retaining valid Terraform versions", () =
   const valid = parsePlanEvents(JSON.stringify({ type: "version", terraform: "1.15.8" }));
   expect(valid.flavor).toBe("terraform");
   expect(valid.version).toBe("1.15.8");
+  const ambiguous = parsePlanEvents(JSON.stringify({ type: "version", tofu: "1.2.3", terraform: "1.15.8" }));
+  expect(ambiguous.flavor).toBe("unknown");
+  expect(ambiguous.version).toBeUndefined();
+});
+
+it("masks implausibly long numeric address indices but preserves count indices", () => {
+  expect(metadataAddress("aws_iam_role.deploy[123456789012]")).toBe('aws_iam_role.deploy["withheld"]');
+  expect(metadataAddress("aws_iam_role.deploy[3]")).toBe("aws_iam_role.deploy[3]");
 });
 
 it("keeps the plan summary separate from an apply summary", () => {

@@ -141,7 +141,9 @@ const REASON_CODES = new Set([
 /** Unknown reason/action text and for_each keys can contain provider-sensitive values. */
 export const reasonCode = (reason: string | undefined) => (reason && REASON_CODES.has(reason) ? reason : "unknown");
 export function metadataAddress(address: string): string {
-  const masked = address.replace(/\["(?:[^"\\]|\\.)*"\]/g, '["withheld"]');
+  const masked = address
+    .replace(/\["(?:[^"\\]|\\.)*"\]/g, '["withheld"]')
+    .replace(/\[(\d{5,})\]/g, '["withheld"]');
   return /^(?:[\w-]+(?:\[(?:\d+|"withheld")\])?)(?:\.[\w-]+(?:\[(?:\d+|"withheld")\])?)*$/.test(masked)
     ? masked
     : "withheld";
@@ -185,9 +187,10 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
         const tofu = str(event.tofu);
         const terraform = str(event.terraform);
         const version = tofu ?? terraform;
-        if (tofu) result.flavor = "tofu";
-        else if (terraform) result.flavor = "terraform";
-        if (version && /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,32})?$/.test(version)) result.version = version;
+        if (Boolean(tofu) !== Boolean(terraform)) {
+          result.flavor = tofu ? "tofu" : "terraform";
+          if (version && /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,32})?$/.test(version)) result.version = version;
+        }
         break;
       }
       case "planned_change":
