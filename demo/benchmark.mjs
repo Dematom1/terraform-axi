@@ -1,7 +1,7 @@
 // Measures the tokens an agent reads from raw Terraform output vs terraform-axi on the demo fixture.
 // Usage: npm run build && node demo/benchmark.mjs   (needs terraform on PATH; downloads hashicorp/local once)
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -15,12 +15,12 @@ const module = join(home, "infra");
 const env = { PATH: process.env.PATH ?? "", HOME: home, CHECKPOINT_DISABLE: "1" };
 
 /** Returns stdout, which is what an agent reads; exit 2 means changes are present. */
-const run = (command, args) => {
+const run = (command, args, acceptedStatuses = [0]) => {
   const result = spawnSync(command, args, { cwd: home, env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-  if (result.status !== 0 && result.status !== 2) throw new Error(`${command} ${args.join(" ")}: ${result.stderr}`);
+  if (!acceptedStatuses.includes(result.status)) throw new Error(`${command} ${args.join(" ")}: ${result.stderr}`);
   return result.stdout;
 };
-const terraform = (...args) => run("terraform", ["-chdir=infra", "plan", "-input=false", "-lock=false", ...args]);
+const terraform = (...args) => run("terraform", ["-chdir=infra", "plan", "-input=false", "-lock=false", ...args], [0, 2]);
 const axi = (...args) => run(process.execPath, [cli, ...args, "infra", "--binary", "terraform"]);
 
 const print = (line) => process.stdout.write(`${line}\n`);
@@ -38,9 +38,10 @@ try {
       axi("drift"),
     ],
   ];
-  print(
-    `terraform ${run("terraform", ["version", "-json"]).match(/"terraform_version":\s*"([^"]+)"/)?.[1]}, o200k_base tokenizer\n`,
-  );
+  const terraformVersion = JSON.parse(run("terraform", ["version", "-json"])).terraform_version;
+  const localVersion = readFileSync(join(module, ".terraform.lock.hcl"), "utf8").match(/provider "registry\.terraform\.io\/hashicorp\/local" \{[\s\S]*?version\s*=\s*"([^"]+)"/)?.[1];
+  if (!localVersion) throw new Error("hashicorp/local version missing from Terraform lock file");
+  print(`terraform ${terraformVersion}, hashicorp/local ${localVersion}, o200k_base tokenizer\n`);
   print("| Task | Raw command | Tokens | terraform-axi | Tokens | Saved |");
   print("| --- | --- | ---: | --- | ---: | ---: |");
   for (const [task, rawName, raw, axiName, out] of rows) {

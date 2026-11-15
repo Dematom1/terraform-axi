@@ -24,7 +24,7 @@ No install at all: tell your agent "Execute `npx -y terraform-axi` to inspect Te
 
 ![terraform-axi plan and drift on a throwaway local-backend module](https://raw.githubusercontent.com/Dematom1/terraform-axi/main/demo/demo.gif)
 
-Tokens an agent reads for the same throwaway module (8 updates, 1 replacement, 1 destroy, 1 create, 2 drifted files), counted with the `o200k_base` tokenizer on Terraform 1.15.8:
+Tokens an agent reads for the same throwaway module (8 updates, 1 replacement, 1 destroy, 1 create, 2 drifted files), counted with the `o200k_base` tokenizer on Terraform 1.15.8 and `hashicorp/local` 2.5.3. The benchmark prints the versions used; results can differ with other versions.
 
 <!-- prettier-ignore -->
 | Task          | Raw command                           | Tokens | terraform-axi         | Tokens | Saved |

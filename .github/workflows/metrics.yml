@@ -51,9 +51,12 @@ jobs:
           cd "$dir"
           git remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
           auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-          if git -c http.extraheader="$auth" fetch -q --depth=1 origin metrics; then
+          if git -c http.extraheader="$auth" ls-remote --exit-code --heads origin metrics >/dev/null; then
+            git -c http.extraheader="$auth" fetch -q --depth=1 origin metrics
             git checkout -q -b metrics FETCH_HEAD
           else
+            status=$?
+            [ "$status" -eq 2 ] || exit "$status"
             git checkout -q --orphan metrics
           fi
           mkdir -p snapshots
