@@ -33,13 +33,20 @@ const getJSON = async (fetchImpl, url, headers = {}) => {
 
 /** A mismatch starts when the newer of the two sides was published, so no state is needed between runs. */
 export function releaseFreshness(release, registry, now) {
-  const githubVersion = release.tag_name.match(/(\d+\.\d+\.\d+\S*)$/)?.[1] ?? release.tag_name;
-  const npmVersion = registry["dist-tags"].latest;
-  const npmPublishedAt = registry.time[npmVersion];
-  const since = Math.max(Date.parse(release.published_at), Date.parse(npmPublishedAt));
+  const tag = release.tag_name;
+  const npmVersion = registry["dist-tags"]?.latest;
+  const npmPublishedAt = registry.time?.[npmVersion];
+  const githubPublishedAt = Date.parse(release.published_at);
+  const npmPublishedTime = Date.parse(npmPublishedAt);
+  if (typeof tag !== "string" || !tag || !Number.isFinite(githubPublishedAt) ||
+      typeof npmVersion !== "string" || !npmVersion || !Number.isFinite(npmPublishedTime)) {
+    throw new Error("Invalid release freshness metadata");
+  }
+  const githubVersion = tag.match(/(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/)?.[1] ?? tag;
+  const since = Math.max(githubPublishedAt, npmPublishedTime);
   const inSync = githubVersion === npmVersion;
   return {
-    github_tag: release.tag_name,
+    github_tag: tag,
     github_version: githubVersion,
     github_published_at: release.published_at,
     npm_latest: npmVersion,

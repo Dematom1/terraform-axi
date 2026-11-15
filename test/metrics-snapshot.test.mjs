@@ -5,10 +5,12 @@ const now = new Date("2026-11-15T06:17:00Z");
 const release = (tag, published_at = "2026-11-11T00:00:00Z") => ({ tag_name: tag, published_at });
 const registry = (latest, at = "2026-11-11T01:00:00Z") => ({ "dist-tags": { latest }, time: { [latest]: at } });
 
+const releaseTags = Object.fromEntries(REPOS.map((repo) => [repo, `${repo}-v0.1.0`]));
 const fakeFetch = (calls) => async (url, init) => {
   calls.push({ url, authorization: init.headers.authorization });
+  const repo = new URL(url).pathname.split("/")[3];
   const body = url.endsWith("/releases/latest")
-    ? release(`${url.split("/")[5]}-v0.1.0`)
+    ? release(releaseTags[repo])
     : url.startsWith("https://registry.npmjs.org/")
       ? registry("0.1.0")
       : { url };
@@ -62,6 +64,24 @@ describe("release freshness", () => {
       new Date("2026-11-15T07:00:00Z"),
     );
     expect(staleReleases(repos(later))).toEqual(["terraform-axi: GitHub release 0.1.7 vs npm latest 0.1.6 for 25h"]);
+  });
+
+  it("rejects missing or unparsable release metadata", () => {
+    for (const [badRelease, badRegistry] of [
+      [release(null), registry("0.1.0")],
+      [release("v0.1.0", "not-a-date"), registry("0.1.0")],
+      [release("v0.1.0"), registry(null)],
+      [release("v0.1.0"), { "dist-tags": { latest: "0.1.0" }, time: { "0.1.0": "not-a-date" } }],
+    ]) {
+      expect(() => releaseFreshness(badRelease, badRegistry, now)).toThrow("Invalid release freshness metadata");
+    }
+  });
+
+  it("keeps unrecognized release tags out of sync", () => {
+    expect(releaseFreshness(release("unrecognized"), registry("0.1.0"), now)).toMatchObject({
+      github_version: "unrecognized",
+      in_sync: false,
+    });
   });
 
   it("measures a mismatch from the newer side and accepts matching versions", () => {
