@@ -85,15 +85,34 @@ describe("release freshness", () => {
       now,
       "terraform-axi",
     );
-    expect(entry).toMatchObject({ in_sync: false, mismatch_hours: 24 });
-    expect(staleReleases(repos(entry))).toEqual([]);
-    const later = releaseFreshness(
+    // 24h17m is past the 24h grace period: the elapsed time is not truncated to whole hours.
+    expect(entry).toMatchObject({ in_sync: false });
+    expect(entry.mismatch_hours).toBeCloseTo(24 + 17 / 60);
+    expect(staleReleases(repos(entry))).toEqual(["terraform-axi: GitHub release 0.1.7 vs npm latest 0.1.6 for 24.3h"]);
+    const early = releaseFreshness(
       release("terraform-axi-v0.1.7", "2026-11-14T06:00:00Z"),
       registry("0.1.6"),
-      new Date("2026-11-15T07:00:00Z"),
+      new Date("2026-11-15T05:59:00Z"),
       "terraform-axi",
     );
-    expect(staleReleases(repos(later))).toEqual(["terraform-axi: GitHub release 0.1.7 vs npm latest 0.1.6 for 25h"]);
+    expect(staleReleases(repos(early))).toEqual([]);
+  });
+
+  it("keeps the mismatch start across later npm publishes", () => {
+    // GitHub stays at 0.1.6 while npm publishes 0.1.7 and then 0.1.8 daily: the mismatch began at 0.1.7.
+    const registryHistory = {
+      "dist-tags": { latest: "0.1.8" },
+      time: {
+        created: "2026-11-01T00:00:00Z",
+        modified: "2026-11-15T00:00:00Z",
+        "0.1.6": "2026-11-12T00:00:00Z",
+        "0.1.7": "2026-11-13T06:17:00Z",
+        "0.1.8": "2026-11-15T00:00:00Z",
+      },
+    };
+    const entry = releaseFreshness(release("v0.1.6", "2026-11-11T23:00:00Z"), registryHistory, now, "terraform-axi");
+    expect(entry.mismatch_hours).toBe(48);
+    expect(staleReleases(repos(entry))).toHaveLength(1);
   });
 
   it("rejects missing or unparsable release metadata", () => {
@@ -116,15 +135,15 @@ describe("release freshness", () => {
     });
   });
 
-  it("measures a mismatch from the newer side and accepts matching versions", () => {
+  it("dates a GitHub release that npm never published from the release, and accepts matching versions", () => {
     expect(
       releaseFreshness(
-        release("v0.1.6", "2026-11-01T00:00:00Z"),
-        registry("0.1.7", "2026-11-15T00:00:00Z"),
+        release("v0.1.7", "2026-11-14T00:17:00Z"),
+        registry("0.1.6", "2026-11-01T00:00:00Z"),
         now,
         "terraform-axi",
       ).mismatch_hours,
-    ).toBe(6);
+    ).toBe(30);
     expect(releaseFreshness(release("v0.1.6"), registry("0.1.6"), now, "terraform-axi")).toMatchObject({
       in_sync: true,
       mismatch_hours: 0,

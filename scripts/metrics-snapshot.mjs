@@ -31,7 +31,11 @@ const getJSON = async (fetchImpl, url, headers = {}) => {
   return response.json();
 };
 
-/** A mismatch starts when the newer of the two sides was published, so no state is needed between runs. */
+/**
+ * Dates an uninterrupted mismatch from npm's per-version publish times, so no state is needed between runs:
+ * if npm never published the GitHub version, it starts at the GitHub release; otherwise it starts when npm first
+ * published a newer version, so later npm bumps do not restart the grace period.
+ */
 export function releaseFreshness(release, registry, now, repo) {
   const tag = release.tag_name;
   const npmVersion = registry["dist-tags"]?.latest;
@@ -50,8 +54,20 @@ export function releaseFreshness(release, registry, now, repo) {
   }
   const versionPattern = new RegExp(`^(?:${repo}-)?v(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)$`);
   const githubVersion = tag.match(versionPattern)?.[1] ?? null;
-  const since = Math.max(githubPublishedAt, npmPublishedTime);
   const inSync = githubVersion !== null && githubVersion === npmVersion;
+  const githubOnNpm = githubVersion === null ? NaN : Date.parse(registry.time[githubVersion]);
+  const movedOn = Object.entries(registry.time)
+    .filter(([version]) => version !== "created" && version !== "modified")
+    .map(([, at]) => Date.parse(at))
+    .filter((at) => at > githubOnNpm);
+  const since =
+    githubVersion === null
+      ? Math.max(githubPublishedAt, npmPublishedTime)
+      : !Number.isFinite(githubOnNpm)
+        ? githubPublishedAt
+        : movedOn.length > 0
+          ? Math.min(...movedOn)
+          : Math.max(githubPublishedAt, npmPublishedTime);
   return {
     github_tag: tag,
     github_version: githubVersion,
@@ -59,7 +75,8 @@ export function releaseFreshness(release, registry, now, repo) {
     npm_latest: npmVersion,
     npm_published_at: npmPublishedAt,
     in_sync: inSync,
-    mismatch_hours: inSync ? 0 : Math.floor((now.getTime() - since) / 3_600_000),
+    // Unrounded so 24h17m is already past the 24h grace period.
+    mismatch_hours: inSync ? 0 : (now.getTime() - since) / 3_600_000,
   };
 }
 
@@ -95,7 +112,7 @@ export function staleReleases(result) {
     .filter(([, { release }]) => !release.in_sync && release.mismatch_hours > GRACE_HOURS)
     .map(
       ([repo, { release }]) =>
-        `${repo}: GitHub release ${release.github_version} vs npm latest ${release.npm_latest} for ${release.mismatch_hours}h`,
+        `${repo}: GitHub release ${release.github_version} vs npm latest ${release.npm_latest} for ${release.mismatch_hours.toFixed(1)}h`,
     );
 }
 
