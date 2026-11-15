@@ -32,7 +32,7 @@ const getJSON = async (fetchImpl, url, headers = {}) => {
 };
 
 /** A mismatch starts when the newer of the two sides was published, so no state is needed between runs. */
-export function releaseFreshness(release, registry, now) {
+export function releaseFreshness(release, registry, now, repo) {
   const tag = release.tag_name;
   const npmVersion = registry["dist-tags"]?.latest;
   const npmPublishedAt = registry.time?.[npmVersion];
@@ -42,9 +42,10 @@ export function releaseFreshness(release, registry, now) {
       typeof npmVersion !== "string" || !npmVersion || !Number.isFinite(npmPublishedTime)) {
     throw new Error("Invalid release freshness metadata");
   }
-  const githubVersion = tag.match(/(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/)?.[1] ?? tag;
+  const versionPattern = new RegExp(`^(?:${repo}-)?v(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)$`);
+  const githubVersion = tag.match(versionPattern)?.[1] ?? null;
   const since = Math.max(githubPublishedAt, npmPublishedTime);
-  const inSync = githubVersion === npmVersion;
+  const inSync = githubVersion !== null && githubVersion === npmVersion;
   return {
     github_tag: tag,
     github_version: githubVersion,
@@ -75,6 +76,7 @@ export async function snapshot({ token, releaseToken = token, fetchImpl = global
       await getJSON(fetchImpl, `https://api.github.com/repos/${OWNER}/${repo}/releases/latest`, auth(releaseToken)),
       await getJSON(fetchImpl, `https://registry.npmjs.org/${repo}`),
       now,
+      repo,
     );
     repos[repo] = { github, npm, release };
   }
