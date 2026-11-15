@@ -16,12 +16,12 @@ Type `export ROOT="$PWD" DEMO=/tmp/tfaxi-demo && rm -rf "$DEMO" && node demo/fix
 Type `env -i PATH="$PATH" HOME="$DEMO" ROOT="$ROOT" TERM=xterm-256color CHECKPOINT_DISABLE=1 PS1='$ ' bash --norc --noprofile` Enter
 Type `terraform-axi() { node "$ROOT/dist/bin/terraform-axi.js" "$@"; }` Enter
 Type "clear" Enter
-Sleep 500ms
-Show
-
+# The raw-JSON comparison runs before Show so the first visible frame already has content.
 Type "# Raw Terraform JSON: what an agent would otherwise read" Enter
 Type "terraform -chdir=infra plan -json -lock=false | wc -c" Enter
-Sleep 4s
+Sleep 5s
+Show
+Sleep 2s
 
 Type "terraform-axi plan infra --binary terraform" Enter
 Sleep 7s
