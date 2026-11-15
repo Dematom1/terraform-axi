@@ -38,8 +38,14 @@ export function releaseFreshness(release, registry, now, repo) {
   const npmPublishedAt = registry.time?.[npmVersion];
   const githubPublishedAt = Date.parse(release.published_at);
   const npmPublishedTime = Date.parse(npmPublishedAt);
-  if (typeof tag !== "string" || !tag || !Number.isFinite(githubPublishedAt) ||
-      typeof npmVersion !== "string" || !npmVersion || !Number.isFinite(npmPublishedTime)) {
+  if (
+    typeof tag !== "string" ||
+    !tag ||
+    !Number.isFinite(githubPublishedAt) ||
+    typeof npmVersion !== "string" ||
+    !npmVersion ||
+    !Number.isFinite(npmPublishedTime)
+  ) {
     throw new Error("Invalid release freshness metadata");
   }
   const versionPattern = new RegExp(`^(?:${repo}-)?v(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)$`);

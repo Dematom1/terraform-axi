@@ -22,7 +22,8 @@ const run = (command, args, acceptedStatuses = [0]) => {
   if (!acceptedStatuses.includes(result.status)) throw new Error(`${command} ${args.join(" ")}: ${result.stderr}`);
   return result.stdout;
 };
-const terraform = (...args) => run("terraform", ["-chdir=infra", "plan", "-input=false", "-lock=false", ...args], [0, 2]);
+const terraform = (...args) =>
+  run("terraform", ["-chdir=infra", "plan", "-input=false", "-lock=false", ...args], [0, 2]);
 const axi = (...args) => run(process.execPath, [cli, ...args, "infra", "--binary", "terraform"]);
 
 const print = (line) => process.stdout.write(`${line}\n`);
@@ -42,7 +43,9 @@ try {
       axi("drift"),
     ],
   ];
-  const localVersion = readFileSync(join(module, ".terraform.lock.hcl"), "utf8").match(/provider "registry\.terraform\.io\/hashicorp\/local" \{[\s\S]*?version\s*=\s*"([^"]+)"/)?.[1];
+  const localVersion = readFileSync(join(module, ".terraform.lock.hcl"), "utf8").match(
+    /provider "registry\.terraform\.io\/hashicorp\/local" \{[\s\S]*?version\s*=\s*"([^"]+)"/,
+  )?.[1];
   if (!localVersion) throw new Error("hashicorp/local version missing from Terraform lock file");
   print(`terraform ${terraformVersion}, hashicorp/local ${localVersion}, o200k_base tokenizer\n`);
   print("| Task | Raw command | Tokens | terraform-axi | Tokens | Saved |");

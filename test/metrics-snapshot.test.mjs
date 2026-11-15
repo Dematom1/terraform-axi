@@ -1,3 +1,4 @@
+import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { REPOS, releaseFreshness, snapshot, staleReleases } from "../scripts/metrics-snapshot.mjs";
 
@@ -7,12 +8,22 @@ const registry = (latest, at = "2026-11-11T01:00:00Z") => ({ "dist-tags": { late
 
 const apiResponses = (url) => {
   const path = new URL(url).pathname;
-  const repo = path.startsWith("/repos/") ? path.split("/")[3] : path.startsWith("/downloads/") ? path.split("/")[4] : path.startsWith("/versions/") ? path.split("/")[2] : path.slice(1);
-  if (path.endsWith("/traffic/views")) return { count: 12, uniques: 8, views: [{ timestamp: "2026-11-14T00:00:00Z", count: 12, uniques: 8 }] };
-  if (path.endsWith("/traffic/clones")) return { count: 4, uniques: 3, clones: [{ timestamp: "2026-11-14T00:00:00Z", count: 4, uniques: 3 }] };
+  const repo = path.startsWith("/repos/")
+    ? path.split("/")[3]
+    : path.startsWith("/downloads/")
+      ? path.split("/")[4]
+      : path.startsWith("/versions/")
+        ? path.split("/")[2]
+        : path.slice(1);
+  if (path.endsWith("/traffic/views"))
+    return { count: 12, uniques: 8, views: [{ timestamp: "2026-11-14T00:00:00Z", count: 12, uniques: 8 }] };
+  if (path.endsWith("/traffic/clones"))
+    return { count: 4, uniques: 3, clones: [{ timestamp: "2026-11-14T00:00:00Z", count: 4, uniques: 3 }] };
   if (path.endsWith("/traffic/popular/referrers")) return [{ referrer: "github.com", count: 3, uniques: 2 }];
-  if (path.endsWith("/traffic/popular/paths")) return [{ path: "/Dematom1/terraform-axi", title: "terraform-axi", count: 5, uniques: 4 }];
-  if (path === `/downloads/range/last-month/${repo}`) return { start: "2026-10-16", end: "2026-11-14", package: repo, downloads: [{ day: "2026-11-14", downloads: 7 }] };
+  if (path.endsWith("/traffic/popular/paths"))
+    return [{ path: "/Dematom1/terraform-axi", title: "terraform-axi", count: 5, uniques: 4 }];
+  if (path === `/downloads/range/last-month/${repo}`)
+    return { start: "2026-10-16", end: "2026-11-14", package: repo, downloads: [{ day: "2026-11-14", downloads: 7 }] };
   if (path === `/versions/${repo}/last-week`) return { package: repo, downloads: { "0.1.0": 2 } };
   if (path === `/repos/Dematom1/${repo}/releases/latest`) return release(`${repo}-v0.1.0`);
   if (path === `/${repo}`) return { "dist-tags": { latest: "0.1.0" }, time: { "0.1.0": "2026-11-11T01:00:00Z" } };
@@ -68,7 +79,12 @@ describe("release freshness", () => {
   const repos = (entry) => ({ repos: { "terraform-axi": { release: entry } } });
 
   it("flags a GitHub release that npm latest has lacked for more than 24h", () => {
-    const entry = releaseFreshness(release("terraform-axi-v0.1.7", "2026-11-14T06:00:00Z"), registry("0.1.6"), now, "terraform-axi");
+    const entry = releaseFreshness(
+      release("terraform-axi-v0.1.7", "2026-11-14T06:00:00Z"),
+      registry("0.1.6"),
+      now,
+      "terraform-axi",
+    );
     expect(entry).toMatchObject({ in_sync: false, mismatch_hours: 24 });
     expect(staleReleases(repos(entry))).toEqual([]);
     const later = releaseFreshness(
@@ -87,7 +103,9 @@ describe("release freshness", () => {
       [release("v0.1.0"), registry(null)],
       [release("v0.1.0"), { "dist-tags": { latest: "0.1.0" }, time: { "0.1.0": "not-a-date" } }],
     ]) {
-      expect(() => releaseFreshness(badRelease, badRegistry, now, "terraform-axi")).toThrow("Invalid release freshness metadata");
+      expect(() => releaseFreshness(badRelease, badRegistry, now, "terraform-axi")).toThrow(
+        "Invalid release freshness metadata",
+      );
     }
   });
 
@@ -100,8 +118,12 @@ describe("release freshness", () => {
 
   it("measures a mismatch from the newer side and accepts matching versions", () => {
     expect(
-      releaseFreshness(release("v0.1.6", "2026-11-01T00:00:00Z"), registry("0.1.7", "2026-11-15T00:00:00Z"), now, "terraform-axi")
-        .mismatch_hours,
+      releaseFreshness(
+        release("v0.1.6", "2026-11-01T00:00:00Z"),
+        registry("0.1.7", "2026-11-15T00:00:00Z"),
+        now,
+        "terraform-axi",
+      ).mismatch_hours,
     ).toBe(6);
     expect(releaseFreshness(release("v0.1.6"), registry("0.1.6"), now, "terraform-axi")).toMatchObject({
       in_sync: true,
