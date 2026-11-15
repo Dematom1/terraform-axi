@@ -26,6 +26,8 @@ const axi = (...args) => run(process.execPath, [cli, ...args, "infra", "--binary
 const print = (line) => process.stdout.write(`${line}\n`);
 
 try {
+  const terraformVersion = JSON.parse(run("terraform", ["version", "-json"])).terraform_version;
+  if (terraformVersion !== "1.15.8") throw new Error(`benchmark requires Terraform 1.15.8, found ${terraformVersion}`);
   buildFixture(module);
   const rows = [
     ["Review a plan", "`terraform plan -json`", terraform("-json"), "`terraform-axi plan`", axi("plan")],
@@ -38,7 +40,6 @@ try {
       axi("drift"),
     ],
   ];
-  const terraformVersion = JSON.parse(run("terraform", ["version", "-json"])).terraform_version;
   const localVersion = readFileSync(join(module, ".terraform.lock.hcl"), "utf8").match(/provider "registry\.terraform\.io\/hashicorp\/local" \{[\s\S]*?version\s*=\s*"([^"]+)"/)?.[1];
   if (!localVersion) throw new Error("hashicorp/local version missing from Terraform lock file");
   print(`terraform ${terraformVersion}, hashicorp/local ${localVersion}, o200k_base tokenizer\n`);
