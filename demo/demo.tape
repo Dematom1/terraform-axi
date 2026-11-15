@@ -12,7 +12,7 @@ Set TypingSpeed 40ms
 Set Theme "Catppuccin Mocha"
 
 Hide
-Type `export ROOT="$PWD" DEMO=/tmp/tfaxi-demo && rm -rf "$DEMO" && node demo/fixture.mjs "$DEMO/infra" && cd "$DEMO"` Enter
+Type `export ROOT="$PWD" DEMO=/tmp/tfaxi-demo && { [ ! -e "$DEMO" ] || [ -e "$DEMO/.tfaxi-demo-owned" ] || { echo "refusing to delete $DEMO" >&2; exit 1; }; } && rm -rf "$DEMO" && mkdir -p "$DEMO" && touch "$DEMO/.tfaxi-demo-owned" && node demo/fixture.mjs "$DEMO/infra" && cd "$DEMO"` Enter
 Type `env -i PATH="$PATH" HOME="$DEMO" ROOT="$ROOT" TERM=xterm-256color CHECKPOINT_DISABLE=1 PS1='$ ' bash --norc --noprofile` Enter
 Type `terraform-axi() { node "$ROOT/dist/bin/terraform-axi.js" "$@"; }` Enter
 Type "clear" Enter

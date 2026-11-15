@@ -1,7 +1,7 @@
 // Measures the tokens an agent reads from raw Terraform output vs terraform-axi on the demo fixture.
 // Usage: npm run build && node demo/benchmark.mjs   (needs terraform on PATH; downloads hashicorp/local once)
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -10,8 +10,11 @@ import { buildFixture } from "./fixture.mjs";
 
 const cli = join(import.meta.dirname, "..", "dist", "bin", "terraform-axi.js");
 const home = join(tmpdir(), "tfaxi-bench");
+const marker = join(home, ".tfaxi-bench-owned");
+if (existsSync(home) && !existsSync(marker)) throw new Error(`refusing to delete unowned ${home}; remove it yourself`);
 rmSync(home, { recursive: true, force: true });
 mkdirSync(home, { recursive: true });
+writeFileSync(marker, "");
 const module = join(home, "infra");
 // Only PATH reaches the subprocesses: no cloud credentials and no TF_* variables.
 const env = { PATH: process.env.PATH ?? "", HOME: home, CHECKPOINT_DISABLE: "1" };
