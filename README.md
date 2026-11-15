@@ -31,7 +31,7 @@ Tokens an agent reads for the same throwaway module (8 updates, 1 replacement, 1
 | ------------- | ------------------------------------- | -----: | --------------------- | -----: | ----: |
 | Review a plan | `terraform plan -json`                | 5,008  | `terraform-axi plan`  | 361    | 93%   |
 | Review a plan | `terraform plan` (text)               | 1,384  | `terraform-axi plan`  | 361    | 74%   |
-| Check drift   | `terraform plan -refresh-only -json`  | 3,651  | `terraform-axi drift` | 145    | 96%   |
+| Check drift   | `terraform plan -refresh-only -json`  | 3,651  | `terraform-axi drift` | 140    | 96%   |
 
 Reproduce with `npm run build && node demo/benchmark.mjs` (needs `terraform` on `PATH`). The fixture is [demo/fixture.mjs](demo/fixture.mjs) and the recording is [demo/demo.tape](demo/demo.tape) ([VHS](https://github.com/charmbracelet/vhs)).
 
