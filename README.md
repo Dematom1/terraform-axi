@@ -10,11 +10,49 @@
 
 Read-only Terraform and OpenTofu inspection for agents. Output is compact [TOON](https://toonformat.dev/) and follows [AXI](https://github.com/kunchenguid/axi) principles. CI tests Linux and macOS; Windows is not currently supported.
 
-**Safety:** terraform-axi never applies or destroys. Secrets in Terraform state output are always redacted; configured wrapper text may be shown as entered. It never writes state to disk. `plan` runs `plan -json -input=false -lock=false -detailed-exitcode` (exit 2 means changes are present) and never writes a plan file (`TF_CLI_ARGS*` is not passed through, so the environment cannot add `-out`). `drift` runs the same plan with `-refresh-only`, so it compares state with real infrastructure, reports only drifted resource addresses and actions (never attribute values), and never writes state or plan files. `doctor` reports backend and credential diagnostics plus one unauthenticated DNS/TCP reachability check (unless `--offline`), without initializing Terraform or accessing state. A DNS timeout bounds the reported result; Node's system resolver lookup may continue after that result.
+## Quick start
 
-## Install and configure
+Install the agent skill for Claude Code, Codex, Cursor, OpenCode, and other agents that support skills:
 
-Requires Node.js 20.19+.
+```sh
+npx skills add Dematom1/terraform-axi --skill terraform-axi -g
+```
+
+No install at all: tell your agent "Execute `npx -y terraform-axi` to inspect Terraform/OpenTofu plans, drift and state." Requires Node.js 20.19+.
+
+## Demo
+
+![terraform-axi plan and drift on a throwaway local-backend module](https://raw.githubusercontent.com/Dematom1/terraform-axi/main/demo/demo.gif)
+
+Tokens an agent reads for the same throwaway module (8 updates, 1 replacement, 1 destroy, 1 create, 2 drifted files), counted with the `o200k_base` tokenizer on Terraform 1.15.8:
+
+<!-- prettier-ignore -->
+| Task          | Raw command                           | Tokens | terraform-axi         | Tokens | Saved |
+| ------------- | ------------------------------------- | -----: | --------------------- | -----: | ----: |
+| Review a plan | `terraform plan -json`                | 5,008  | `terraform-axi plan`  | 361    | 93%   |
+| Review a plan | `terraform plan` (text)               | 1,384  | `terraform-axi plan`  | 361    | 74%   |
+| Check drift   | `terraform plan -refresh-only -json`  | 3,651  | `terraform-axi drift` | 145    | 96%   |
+
+Reproduce with `npm run build && node demo/benchmark.mjs` (needs `terraform` on `PATH`). The fixture is [demo/fixture.mjs](demo/fixture.mjs) and the recording is [demo/demo.tape](demo/demo.tape) ([VHS](https://github.com/charmbracelet/vhs)).
+
+## Safety
+
+terraform-axi never applies or destroys. Secrets in Terraform state output are always redacted; configured wrapper text may be shown as entered. It never writes state to disk. `plan` runs `plan -json -input=false -lock=false -detailed-exitcode` (exit 2 means changes are present) and never writes a plan file (`TF_CLI_ARGS*` is not passed through, so the environment cannot add `-out`). `drift` runs the same plan with `-refresh-only`, so it compares state with real infrastructure, reports only drifted resource addresses and actions (never attribute values), and never writes state or plan files. `doctor` reports backend and credential diagnostics plus one unauthenticated DNS/TCP reachability check (unless `--offline`), without initializing Terraform or accessing state. A DNS timeout bounds the reported result; Node's system resolver lookup may continue after that result.
+
+## Dematom1 platform AXIs
+
+<!-- prettier-ignore -->
+| Tool | What it does | Install the skill |
+| --- | --- | --- |
+| [terraform-axi](https://github.com/Dematom1/terraform-axi) | Read-only Terraform and OpenTofu plan, drift and state | `npx skills add Dematom1/terraform-axi --skill terraform-axi -g` |
+| [k8s-axi](https://github.com/Dematom1/k8s-axi) | Strictly read-only Kubernetes diagnostics | `npx skills add Dematom1/k8s-axi --skill k8s-axi -g` |
+| [argocd-axi](https://github.com/Dematom1/argocd-axi) | Argo CD app health, diffs and history; read-only except opt-in writes | `npx skills add Dematom1/argocd-axi --skill argocd-axi -g` |
+| [argo-workflows-axi](https://github.com/Dematom1/argo-workflows-axi) | Argo Workflows with bounded logs; every write previews first | `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi -g` |
+| [datadog-axi](https://github.com/Dematom1/datadog-axi) (optional) | Read-first Datadog, problems first; only if you use Datadog | `npx skills add Dematom1/datadog-axi --skill datadog-axi -g` |
+
+## Optional: global install and configuration
+
+A global install adds a configured wrapper, registered modules, and session context hooks. The skill and `npx -y terraform-axi` work without it.
 
 ```sh
 npm install -g terraform-axi
