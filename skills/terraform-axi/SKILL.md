@@ -1,11 +1,13 @@
 ---
 name: terraform-axi
-description: Read-only Terraform and OpenTofu CLI; state list infers resource types by default, while --full reads state JSON to resolve them.
+description: Read-only Terraform/OpenTofu plan, drift and state for agents. Summarizes risky changes, reports drift without attribute values, and redacts secrets; never applies, destroys or writes state.
 ---
 
 # terraform-axi
 
 Use terraform-axi for read-only infrastructure inspection. Never apply or destroy.
+
+You do not need terraform-axi installed globally - run every command as `npx -y terraform-axi <command>`. If terraform-axi output suggests a command starting with `terraform-axi`, run it as `npx -y terraform-axi ...` instead. Use bare `terraform-axi` only when it is installed globally.
 
 See the [README command reference](https://github.com/Dematom1/terraform-axi#commands) for the full command list.
 
