@@ -1,0 +1,977 @@
+{
+  "date": "2026-11-17",
+  "captured_at": "2026-11-17T06:29:27.602Z",
+  "repos": {
+    "terraform-axi": {
+      "github": {
+        "views": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "clones": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "referrers": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "paths": "skipped: METRICS_TRAFFIC_TOKEN not set"
+      },
+      "npm": {
+        "downloads": {
+          "start": "2026-10-17",
+          "end": "2026-11-15",
+          "package": "terraform-axi",
+          "downloads": [
+            {
+              "downloads": 0,
+              "day": "2026-10-17"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-18"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-19"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-20"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-21"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-22"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-23"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-24"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-25"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-26"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-27"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-28"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-29"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-30"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-31"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-11-01"
+            },
+            {
+              "downloads": 410,
+              "day": "2026-11-02"
+            },
+            {
+              "downloads": 216,
+              "day": "2026-11-03"
+            },
+            {
+              "downloads": 57,
+              "day": "2026-11-04"
+            },
+            {
+              "downloads": 36,
+              "day": "2026-11-05"
+            },
+            {
+              "downloads": 41,
+              "day": "2026-11-06"
+            },
+            {
+              "downloads": 382,
+              "day": "2026-11-07"
+            },
+            {
+              "downloads": 134,
+              "day": "2026-11-08"
+            },
+            {
+              "downloads": 422,
+              "day": "2026-11-09"
+            },
+            {
+              "downloads": 210,
+              "day": "2026-11-10"
+            },
+            {
+              "downloads": 111,
+              "day": "2026-11-11"
+            },
+            {
+              "downloads": 143,
+              "day": "2026-11-12"
+            },
+            {
+              "downloads": 38,
+              "day": "2026-11-13"
+            },
+            {
+              "downloads": 35,
+              "day": "2026-11-14"
+            },
+            {
+              "downloads": 278,
+              "day": "2026-11-15"
+            }
+          ]
+        },
+        "versions": {
+          "package": "terraform-axi",
+          "downloads": {
+            "0.0.0": 7,
+            "0.0.0-stage": 8,
+            "0.1.0": 6,
+            "0.1.1": 511,
+            "0.1.2": 17,
+            "0.1.3": 90,
+            "0.1.4": 176,
+            "0.1.5": 271,
+            "0.1.6": 151
+          }
+        }
+      },
+      "release": {
+        "github_tag": "terraform-axi-v0.1.6",
+        "github_version": "0.1.6",
+        "github_published_at": "2026-11-11T23:25:36Z",
+        "npm_latest": "0.1.6",
+        "npm_published_at": "2026-11-15T21:37:45.665Z",
+        "in_sync": true,
+        "mismatch_hours": 0
+      }
+    },
+    "argocd-axi": {
+      "github": {
+        "views": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "clones": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "referrers": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "paths": "skipped: METRICS_TRAFFIC_TOKEN not set"
+      },
+      "npm": {
+        "downloads": {
+          "start": "2026-10-17",
+          "end": "2026-11-15",
+          "package": "argocd-axi",
+          "downloads": [
+            {
+              "downloads": 0,
+              "day": "2026-10-17"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-18"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-19"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-20"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-21"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-22"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-23"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-24"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-25"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-26"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-27"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-28"
+            },
+            {
+              "downloads": 268,
+              "day": "2026-10-29"
+            },
+            {
+              "downloads": 353,
+              "day": "2026-10-30"
+            },
+            {
+              "downloads": 747,
+              "day": "2026-10-31"
+            },
+            {
+              "downloads": 232,
+              "day": "2026-11-01"
+            },
+            {
+              "downloads": 650,
+              "day": "2026-11-02"
+            },
+            {
+              "downloads": 291,
+              "day": "2026-11-03"
+            },
+            {
+              "downloads": 87,
+              "day": "2026-11-04"
+            },
+            {
+              "downloads": 73,
+              "day": "2026-11-05"
+            },
+            {
+              "downloads": 40,
+              "day": "2026-11-06"
+            },
+            {
+              "downloads": 206,
+              "day": "2026-11-07"
+            },
+            {
+              "downloads": 79,
+              "day": "2026-11-08"
+            },
+            {
+              "downloads": 201,
+              "day": "2026-11-09"
+            },
+            {
+              "downloads": 96,
+              "day": "2026-11-10"
+            },
+            {
+              "downloads": 68,
+              "day": "2026-11-11"
+            },
+            {
+              "downloads": 56,
+              "day": "2026-11-12"
+            },
+            {
+              "downloads": 3,
+              "day": "2026-11-13"
+            },
+            {
+              "downloads": 5,
+              "day": "2026-11-14"
+            },
+            {
+              "downloads": 171,
+              "day": "2026-11-15"
+            }
+          ]
+        },
+        "versions": {
+          "package": "argocd-axi",
+          "downloads": {
+            "0.0.0-stage": 4,
+            "0.1.0": 3,
+            "0.1.10": 9,
+            "0.1.11": 9,
+            "0.1.12": 8,
+            "0.1.13": 40,
+            "0.1.14": 77,
+            "0.1.15": 241,
+            "0.1.16": 143,
+            "0.1.2": 2,
+            "0.1.3": 2,
+            "0.1.4": 2,
+            "0.1.5": 2,
+            "0.1.6": 5,
+            "0.1.7": 6,
+            "0.1.8": 38,
+            "0.1.9": 9
+          }
+        }
+      },
+      "release": {
+        "github_tag": "argocd-axi-v0.1.16",
+        "github_version": "0.1.16",
+        "github_published_at": "2026-11-11T23:25:42Z",
+        "npm_latest": "0.1.16",
+        "npm_published_at": "2026-11-15T21:37:40.127Z",
+        "in_sync": true,
+        "mismatch_hours": 0
+      }
+    },
+    "datadog-axi": {
+      "github": {
+        "views": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "clones": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "referrers": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "paths": "skipped: METRICS_TRAFFIC_TOKEN not set"
+      },
+      "npm": {
+        "downloads": {
+          "start": "2026-10-17",
+          "end": "2026-11-15",
+          "package": "datadog-axi",
+          "downloads": [
+            {
+              "downloads": 0,
+              "day": "2026-10-17"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-18"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-19"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-20"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-21"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-22"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-23"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-24"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-25"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-26"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-27"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-28"
+            },
+            {
+              "downloads": 259,
+              "day": "2026-10-29"
+            },
+            {
+              "downloads": 375,
+              "day": "2026-10-30"
+            },
+            {
+              "downloads": 889,
+              "day": "2026-10-31"
+            },
+            {
+              "downloads": 474,
+              "day": "2026-11-01"
+            },
+            {
+              "downloads": 347,
+              "day": "2026-11-02"
+            },
+            {
+              "downloads": 70,
+              "day": "2026-11-03"
+            },
+            {
+              "downloads": 40,
+              "day": "2026-11-04"
+            },
+            {
+              "downloads": 51,
+              "day": "2026-11-05"
+            },
+            {
+              "downloads": 81,
+              "day": "2026-11-06"
+            },
+            {
+              "downloads": 227,
+              "day": "2026-11-07"
+            },
+            {
+              "downloads": 80,
+              "day": "2026-11-08"
+            },
+            {
+              "downloads": 227,
+              "day": "2026-11-09"
+            },
+            {
+              "downloads": 62,
+              "day": "2026-11-10"
+            },
+            {
+              "downloads": 37,
+              "day": "2026-11-11"
+            },
+            {
+              "downloads": 56,
+              "day": "2026-11-12"
+            },
+            {
+              "downloads": 6,
+              "day": "2026-11-13"
+            },
+            {
+              "downloads": 5,
+              "day": "2026-11-14"
+            },
+            {
+              "downloads": 23,
+              "day": "2026-11-15"
+            }
+          ]
+        },
+        "versions": {
+          "package": "datadog-axi",
+          "downloads": {
+            "0.0.0-stage": 8,
+            "0.1.0": 7,
+            "0.1.1": 6,
+            "0.1.10": 12,
+            "0.1.11": 11,
+            "0.1.12": 73,
+            "0.1.13": 246,
+            "0.1.2": 7,
+            "0.1.3": 7,
+            "0.1.4": 6,
+            "0.1.5": 6,
+            "0.1.6": 6,
+            "0.1.7": 6,
+            "0.1.8": 7,
+            "0.1.9": 8
+          }
+        }
+      },
+      "release": {
+        "github_tag": "datadog-axi-v0.1.14",
+        "github_version": "0.1.14",
+        "github_published_at": "2026-11-16T08:09:38Z",
+        "npm_latest": "0.1.14",
+        "npm_published_at": "2026-11-16T21:42:20.564Z",
+        "in_sync": true,
+        "mismatch_hours": 0
+      }
+    },
+    "argo-workflows-axi": {
+      "github": {
+        "views": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "clones": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "referrers": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "paths": "skipped: METRICS_TRAFFIC_TOKEN not set"
+      },
+      "npm": {
+        "downloads": {
+          "start": "2026-10-17",
+          "end": "2026-11-15",
+          "package": "argo-workflows-axi",
+          "downloads": [
+            {
+              "downloads": 0,
+              "day": "2026-10-17"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-18"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-19"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-20"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-21"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-22"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-23"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-24"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-25"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-26"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-27"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-28"
+            },
+            {
+              "downloads": 398,
+              "day": "2026-10-29"
+            },
+            {
+              "downloads": 599,
+              "day": "2026-10-30"
+            },
+            {
+              "downloads": 543,
+              "day": "2026-10-31"
+            },
+            {
+              "downloads": 590,
+              "day": "2026-11-01"
+            },
+            {
+              "downloads": 400,
+              "day": "2026-11-02"
+            },
+            {
+              "downloads": 86,
+              "day": "2026-11-03"
+            },
+            {
+              "downloads": 57,
+              "day": "2026-11-04"
+            },
+            {
+              "downloads": 54,
+              "day": "2026-11-05"
+            },
+            {
+              "downloads": 109,
+              "day": "2026-11-06"
+            },
+            {
+              "downloads": 212,
+              "day": "2026-11-07"
+            },
+            {
+              "downloads": 90,
+              "day": "2026-11-08"
+            },
+            {
+              "downloads": 199,
+              "day": "2026-11-09"
+            },
+            {
+              "downloads": 64,
+              "day": "2026-11-10"
+            },
+            {
+              "downloads": 62,
+              "day": "2026-11-11"
+            },
+            {
+              "downloads": 53,
+              "day": "2026-11-12"
+            },
+            {
+              "downloads": 5,
+              "day": "2026-11-13"
+            },
+            {
+              "downloads": 4,
+              "day": "2026-11-14"
+            },
+            {
+              "downloads": 8,
+              "day": "2026-11-15"
+            }
+          ]
+        },
+        "versions": {
+          "package": "argo-workflows-axi",
+          "downloads": {
+            "0.0.0-stage": 4,
+            "0.1.0": 3,
+            "0.1.1": 2,
+            "0.1.10": 4,
+            "0.1.11": 6,
+            "0.1.13": 9,
+            "0.1.14": 42,
+            "0.1.15": 74,
+            "0.1.16": 232,
+            "0.1.2": 2,
+            "0.1.4": 2,
+            "0.1.5": 2,
+            "0.1.6": 3,
+            "0.1.7": 3,
+            "0.1.8": 4,
+            "0.1.9": 3
+          }
+        }
+      },
+      "release": {
+        "github_tag": "argo-workflows-axi-v0.1.17",
+        "github_version": "0.1.17",
+        "github_published_at": "2026-11-16T08:08:08Z",
+        "npm_latest": "0.1.17",
+        "npm_published_at": "2026-11-16T21:42:31.352Z",
+        "in_sync": true,
+        "mismatch_hours": 0
+      }
+    },
+    "search-console-axi": {
+      "github": {
+        "views": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "clones": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "referrers": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "paths": "skipped: METRICS_TRAFFIC_TOKEN not set"
+      },
+      "npm": {
+        "downloads": {
+          "start": "2026-10-17",
+          "end": "2026-11-15",
+          "package": "search-console-axi",
+          "downloads": [
+            {
+              "downloads": 0,
+              "day": "2026-10-17"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-18"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-19"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-20"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-21"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-22"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-23"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-24"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-25"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-26"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-27"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-28"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-29"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-30"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-31"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-11-01"
+            },
+            {
+              "downloads": 452,
+              "day": "2026-11-02"
+            },
+            {
+              "downloads": 63,
+              "day": "2026-11-03"
+            },
+            {
+              "downloads": 74,
+              "day": "2026-11-04"
+            },
+            {
+              "downloads": 24,
+              "day": "2026-11-05"
+            },
+            {
+              "downloads": 23,
+              "day": "2026-11-06"
+            },
+            {
+              "downloads": 222,
+              "day": "2026-11-07"
+            },
+            {
+              "downloads": 61,
+              "day": "2026-11-08"
+            },
+            {
+              "downloads": 200,
+              "day": "2026-11-09"
+            },
+            {
+              "downloads": 50,
+              "day": "2026-11-10"
+            },
+            {
+              "downloads": 28,
+              "day": "2026-11-11"
+            },
+            {
+              "downloads": 43,
+              "day": "2026-11-12"
+            },
+            {
+              "downloads": 9,
+              "day": "2026-11-13"
+            },
+            {
+              "downloads": 8,
+              "day": "2026-11-14"
+            },
+            {
+              "downloads": 13,
+              "day": "2026-11-15"
+            }
+          ]
+        },
+        "versions": {
+          "package": "search-console-axi",
+          "downloads": {
+            "0.0.0": 8,
+            "0.0.0-stage": 8,
+            "0.1.0": 9,
+            "0.1.1": 78,
+            "0.1.2": 248
+          }
+        }
+      },
+      "release": {
+        "github_tag": "search-console-axi-v0.1.2",
+        "github_version": "0.1.2",
+        "github_published_at": "2026-11-09T08:11:56Z",
+        "npm_latest": "0.1.2",
+        "npm_published_at": "2026-11-09T16:23:28.863Z",
+        "in_sync": true,
+        "mismatch_hours": 0
+      }
+    },
+    "k8s-axi": {
+      "github": {
+        "views": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "clones": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "referrers": "skipped: METRICS_TRAFFIC_TOKEN not set",
+        "paths": "skipped: METRICS_TRAFFIC_TOKEN not set"
+      },
+      "npm": {
+        "downloads": {
+          "start": "2026-10-17",
+          "end": "2026-11-15",
+          "package": "k8s-axi",
+          "downloads": [
+            {
+              "downloads": 0,
+              "day": "2026-10-17"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-18"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-19"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-20"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-21"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-22"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-23"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-24"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-25"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-26"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-27"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-28"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-29"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-30"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-10-31"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-11-01"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-11-02"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-11-03"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-11-04"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-11-05"
+            },
+            {
+              "downloads": 0,
+              "day": "2026-11-06"
+            },
+            {
+              "downloads": 473,
+              "day": "2026-11-07"
+            },
+            {
+              "downloads": 84,
+              "day": "2026-11-08"
+            },
+            {
+              "downloads": 33,
+              "day": "2026-11-09"
+            },
+            {
+              "downloads": 172,
+              "day": "2026-11-10"
+            },
+            {
+              "downloads": 52,
+              "day": "2026-11-11"
+            },
+            {
+              "downloads": 35,
+              "day": "2026-11-12"
+            },
+            {
+              "downloads": 13,
+              "day": "2026-11-13"
+            },
+            {
+              "downloads": 5,
+              "day": "2026-11-14"
+            },
+            {
+              "downloads": 8,
+              "day": "2026-11-15"
+            }
+          ]
+        },
+        "versions": {
+          "package": "k8s-axi",
+          "downloads": {
+            "0.1.1": 30,
+            "0.1.2": 99,
+            "0.1.3": 189
+          }
+        }
+      },
+      "release": {
+        "github_tag": "k8s-axi-v0.1.4",
+        "github_version": "0.1.4",
+        "github_published_at": "2026-11-16T08:08:46Z",
+        "npm_latest": "0.1.4",
+        "npm_published_at": "2026-11-16T21:42:25.985Z",
+        "in_sync": true,
+        "mismatch_hours": 0
+      }
+    }
+  }
+}
