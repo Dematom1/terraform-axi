@@ -319,7 +319,7 @@ describe("safeText", () => {
   });
 });
 
-it("omits invalid version values while retaining valid Terraform versions and build metadata", () => {
+it("omits unsafe version metadata while retaining valid Terraform versions", () => {
   const leaked = parsePlanEvents(JSON.stringify({ type: "version", terraform: SECRETS.GHP }));
   expect(leaked.flavor).toBe("terraform");
   expect(leaked.version).toBe("unrecognized");
@@ -330,7 +330,8 @@ it("omits invalid version values while retaining valid Terraform versions and bu
   const prerelease = parsePlanEvents(JSON.stringify({ type: "version", terraform: "1.2.3-rc2" }));
   expect(prerelease.version).toBe("1.2.3-rc2");
   const build = parsePlanEvents(JSON.stringify({ type: "version", terraform: "1.2.3+build.7" }));
-  expect(build.version).toBe("1.2.3+build.7");
+  expect(build.version).toBe("unrecognized");
+  expect(build.unrecognizedVersions).toBe(1);
   const ambiguous = parsePlanEvents(JSON.stringify({ type: "version", tofu: "1.2.3", terraform: "1.15.8" }));
   expect(ambiguous.flavor).toBe("unknown");
   expect(ambiguous.version).toBeUndefined();
