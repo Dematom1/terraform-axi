@@ -319,7 +319,7 @@ describe("safeText", () => {
   });
 });
 
-it("omits invalid version values while retaining valid Terraform versions", () => {
+it("omits invalid version values while retaining valid Terraform versions and build metadata", () => {
   const leaked = parsePlanEvents(JSON.stringify({ type: "version", terraform: SECRETS.GHP }));
   expect(leaked.flavor).toBe("terraform");
   expect(leaked.version).toBe("unrecognized");
@@ -329,9 +329,22 @@ it("omits invalid version values while retaining valid Terraform versions", () =
   expect(valid.version).toBe("1.15.8");
   const prerelease = parsePlanEvents(JSON.stringify({ type: "version", terraform: "1.2.3-rc2" }));
   expect(prerelease.version).toBe("1.2.3-rc2");
+  const build = parsePlanEvents(JSON.stringify({ type: "version", terraform: "1.2.3+build.7" }));
+  expect(build.version).toBe("1.2.3+build.7");
   const ambiguous = parsePlanEvents(JSON.stringify({ type: "version", tofu: "1.2.3", terraform: "1.15.8" }));
   expect(ambiguous.flavor).toBe("unknown");
   expect(ambiguous.version).toBeUndefined();
+});
+
+it("reports unrecognized metadata counters in diagnose output", () => {
+  const stream = [
+    { type: "version", terraform: "1.2.3-secret" },
+    { type: "apply_complete", hook: { resource: { addr: "aws_instance.example", resource_type: "custom_secret_type" } } },
+  ].map((event) => JSON.stringify(event)).join("\n");
+  expect(diagnose(["-"], stream).data).toMatchObject({
+    unrecognized_versions: 1,
+    unrecognized_types: 1,
+  });
 });
 
 it("masks implausibly long numeric address indices but preserves count indices", () => {

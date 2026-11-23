@@ -163,7 +163,9 @@ export function metadataType(type: string): string {
 }
 
 export function safeVersion(version: string | undefined): string | undefined {
-  return version && /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\d*)?$/.test(version) ? version : undefined;
+  return version && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.test(version)
+    ? version
+    : undefined;
 }
 
 export function metadataAddress(address: string): string {
