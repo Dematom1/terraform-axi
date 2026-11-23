@@ -103,7 +103,7 @@ function decodeChange(event: Json): PlanChange | undefined {
   const type = str(resource.resource_type);
   if (type) {
     row.type = metadataType(type);
-    row.riskType = type;
+    Object.defineProperty(row, "riskType", { value: type });
   }
   const reason = str(change.reason) ?? str(change.action_reason);
   if (reason) row.reason = reason;

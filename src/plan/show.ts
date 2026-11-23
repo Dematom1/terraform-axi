@@ -43,7 +43,7 @@ function decodeResource(entry: unknown): PlanChange | undefined {
   const type = str(entry.type);
   if (type) {
     row.type = metadataType(type);
-    row.riskType = type;
+    Object.defineProperty(row, "riskType", { value: type });
   }
   const reason = str(entry.action_reason);
   if (reason) row.reason = REASONS[reason] ?? reason;

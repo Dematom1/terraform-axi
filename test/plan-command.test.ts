@@ -238,7 +238,7 @@ describe("secret-safe plan and drift output", () => {
     expect(result.stdout).not.toContain("1.2.3-secret");
     expect(result.report.version).toBe("terraform unrecognized");
     expect(result.report.unrecognized_versions).toBe(1);
-    expect(JSON.stringify(result.report).match(/"type":"unrecognized"/g)).toHaveLength(2);
+    expect(JSON.stringify(result.report).match(/"type":"unrecognized"/g)).toHaveLength(3);
     expect(result.report.unrecognized_types).toBe(3);
     expect(result.report.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({ address: "terraform_data.secret", type: "unrecognized", risk: "high", flags: "secret" }),
