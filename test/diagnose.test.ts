@@ -322,10 +322,13 @@ describe("safeText", () => {
 it("omits invalid version values while retaining valid Terraform versions", () => {
   const leaked = parsePlanEvents(JSON.stringify({ type: "version", terraform: SECRETS.GHP }));
   expect(leaked.flavor).toBe("terraform");
-  expect(leaked.version).toBeUndefined();
+  expect(leaked.version).toBe("unrecognized");
+  expect(leaked.unrecognizedVersions).toBe(1);
   const valid = parsePlanEvents(JSON.stringify({ type: "version", terraform: "1.15.8" }));
   expect(valid.flavor).toBe("terraform");
   expect(valid.version).toBe("1.15.8");
+  const prerelease = parsePlanEvents(JSON.stringify({ type: "version", terraform: "1.2.3-rc2" }));
+  expect(prerelease.version).toBe("1.2.3-rc2");
   const ambiguous = parsePlanEvents(JSON.stringify({ type: "version", tofu: "1.2.3", terraform: "1.15.8" }));
   expect(ambiguous.flavor).toBe("unknown");
   expect(ambiguous.version).toBeUndefined();

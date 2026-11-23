@@ -72,6 +72,8 @@ export function renderPlan(
   if (events.skippedWrapperOutput) report.skipped_wrapper_lines = events.skippedWrapperOutput;
   if (events.malformed) report.malformed_lines = events.malformed;
   if (events.unknownEvents) report.unknown_events = events.unknownEvents;
+  if (events.unrecognizedTypes) report.unrecognized_types = events.unrecognizedTypes;
+  if (events.unrecognizedVersions) report.unrecognized_versions = events.unrecognizedVersions;
   let ok = errors.length === 0 && complete && !options.failed;
   if (options.expected) {
     const result = evaluateExpect(options.expected, events);

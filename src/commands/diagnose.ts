@@ -172,6 +172,8 @@ export function parseTextLog(text: string): PlanEvents {
     diagnostics: [],
     malformed: 0,
     unknownEvents: 0,
+    unrecognizedTypes: 0,
+    unrecognizedVersions: 0,
   };
   const started = new Map<string, PlanAction>();
   let open: PlanDiagnostic | undefined;

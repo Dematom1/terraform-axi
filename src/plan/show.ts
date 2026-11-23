@@ -52,6 +52,7 @@ function decodeResource(entry: unknown): PlanChange | undefined {
 export function parseShowDocument(doc: Json): PlanEvents {
   const list = (value: unknown) => (Array.isArray(value) ? value : []);
   let malformed = 0;
+  let unrecognizedTypes = 0;
   const rows = (value: unknown) => {
     if (value !== undefined && !Array.isArray(value)) {
       malformed++;
@@ -63,6 +64,8 @@ export function parseShowDocument(doc: Json): PlanEvents {
         return [];
       }
       const row = decodeResource(entry);
+      const type = str(entry.type);
+      if (type && metadataType(type) === "unrecognized") unrecognizedTypes++;
       if (!row) {
         if (decodeAction(entry.change).action !== "noop") malformed++;
         return [];
@@ -112,10 +115,12 @@ export function parseShowDocument(doc: Json): PlanEvents {
           ...(imports ? { import: imports } : {}),
           ...(tally("forget") ? { forget: tally("forget") } : {}),
         };
-  const version = safeVersion(str(doc.terraform_version));
+  const rawVersion = str(doc.terraform_version);
+  const version = safeVersion(rawVersion);
+  const unrecognizedVersions = rawVersion && !version ? 1 : 0;
   return {
     flavor: "unknown",
-    ...(version ? { version } : {}),
+    ...(version ? { version } : rawVersion ? { version: "unrecognized" } : {}),
     changes,
     drift,
     summary,
@@ -123,6 +128,8 @@ export function parseShowDocument(doc: Json): PlanEvents {
     diagnostics: [],
     malformed,
     unknownEvents: 0,
+    unrecognizedTypes,
+    unrecognizedVersions,
   };
 }
 
