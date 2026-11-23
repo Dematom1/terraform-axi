@@ -207,6 +207,7 @@ describe("secret-safe plan and drift output", () => {
     const events = [
       { type: "version", terraform: "1.2.3-secret" },
       { type: "version", terraform: `1.2.3+${sentinel}` },
+      { type: "version", terraform: "1.2.3-rc123456" },
       {
         type: "planned_change",
         change: { resource: { addr: "terraform_data.planned", resource_type: sentinel }, action: "update" },
@@ -241,8 +242,9 @@ describe("secret-safe plan and drift output", () => {
     expect(result.stdout).not.toContain(sentinel);
     expect(result.stdout).not.toContain("1.2.3-secret");
     expect(result.stdout).not.toContain(`1.2.3+${sentinel}`);
+    expect(result.stdout).not.toContain("1.2.3-rc123456");
     expect(result.report.version).toBe("terraform unrecognized");
-    expect(result.report.unrecognized_versions).toBe(2);
+    expect(result.report.unrecognized_versions).toBe(3);
     expect(JSON.stringify(result.report).match(/"type":"unrecognized"/g)).toHaveLength(3);
     expect(result.report.unrecognized_types).toBe(3);
     expect(result.report.changes).toEqual(
@@ -264,13 +266,13 @@ describe("secret-safe plan and drift output", () => {
       document,
       JSON.stringify({
         planned_values: {},
-        terraform_version: `1.2.3+${sentinel}`,
+        terraform_version: "1.2.12345678",
         resource_changes: [{ address: "terraform_data.item", type: sentinel, change: { actions: ["update"] } }],
       }),
     );
     const showResult = tfaxi(["plan", "--plan-json", document, "--full"]);
     expect(showResult.stdout).not.toContain(sentinel);
-    expect(showResult.stdout).not.toContain(`1.2.3+${sentinel}`);
+    expect(showResult.stdout).not.toContain("1.2.12345678");
     expect(showResult.report.version).toBe("unrecognized");
     expect(showResult.report.unrecognized_types).toBe(1);
     expect(showResult.report.unrecognized_versions).toBe(1);

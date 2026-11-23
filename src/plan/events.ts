@@ -173,7 +173,8 @@ export function metadataType(type: string): string {
 }
 
 export function safeVersion(version: string | undefined): string | undefined {
-  return version && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:alpha|beta|rc)\d*)?$/.test(version)
+  return version &&
+    /^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})(-(alpha|beta|rc)[0-9]{0,2})?$/.test(version)
     ? version
     : undefined;
 }
