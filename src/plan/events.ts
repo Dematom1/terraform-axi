@@ -141,7 +141,7 @@ const REASON_CODES = new Set([
 /** Unknown reason/action text and for_each keys can contain provider-sensitive values. */
 export const reasonCode = (reason: string | undefined) => (reason && REASON_CODES.has(reason) ? reason : "unknown");
 export function metadataType(type: string): string {
-  return /^[A-Za-z_][\w-]{0,63}$/.test(type) ? type : "withheld";
+  return /^[A-Za-z_][\w-]*$/.test(type) ? type : "withheld";
 }
 
 export function safeVersion(version: string | undefined): string | undefined {

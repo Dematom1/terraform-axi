@@ -213,7 +213,17 @@ describe("secret-safe plan and drift output", () => {
         type: "resource_drift",
         change: { resource: { addr: "terraform_data.drifted", resource_type: `type ${sentinel}` }, action: "update" },
       },
-      { type: "change_summary", changes: { add: 0, change: 1, remove: 0 } },
+      {
+        type: "planned_change",
+        change: {
+          resource: {
+            addr: "azurerm_sentinel_data_connector_microsoft_defender_advanced_threat_protection.example",
+            resource_type: "azurerm_sentinel_data_connector_microsoft_defender_advanced_threat_protection",
+          },
+          action: "create",
+        },
+      },
+      { type: "change_summary", changes: { add: 1, change: 1, remove: 0 } },
     ];
     const stream = join(home, "unsafe.jsonl");
     writeFileSync(stream, events.map((event) => JSON.stringify(event)).join("\n"));
@@ -221,6 +231,7 @@ describe("secret-safe plan and drift output", () => {
     const result = tfaxi(["plan", "m", "--full"], { TF_AXI_FIXTURE: stream });
     expect(result.stdout).not.toContain(sentinel);
     expect(JSON.stringify(result.report).match(/"type":"withheld"/g)).toHaveLength(2);
+    expect(JSON.stringify(result.report)).toContain('"type":"azurerm_sentinel_data_connector_microsoft_defender_advanced_threat_protection"');
 
     const document = join(home, "unsafe-show.json");
     writeFileSync(
