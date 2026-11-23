@@ -41,6 +41,7 @@ export function commandHelp(
       return {
         usage: driftUsage,
         flags: [
+          "--plan-json <file>: read a saved show -json plan or plan -json stream; no module, --binary, or --wrapper",
           "--binary terraform|tofu: bypass configured wrapper",
           "--wrapper <command>: per-invocation wrapper",
           "--full: all drift rows",
@@ -49,12 +50,13 @@ export function commandHelp(
         defaults: "600 seconds; first 20 drift rows (--full lists all); configured binary/wrapper (auto if unset)",
         runs: DRIFT_ARGS.join(" "),
         diagnostics: "metadata only; provider text and subprocess excerpts withheld",
+        plan_json: "strict JSON input; wrapper progress is not tolerated; human_only command omitted",
         wrapper_stdout:
           "plain-text progress counted as skipped_wrapper_lines; JSON-looking lines must be complete JSON events; prefer progress on stderr",
         never: "apply, refresh, -out plan files, state writes",
         examples: [
           "terraform-axi drift infra/prod",
-          "terraform-axi drift infra/prod --full",
+          "terraform-axi drift --plan-json plan.json --full",
           "terraform-axi drift . --binary tofu --full",
         ],
       };

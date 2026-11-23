@@ -3,6 +3,8 @@
  * `plan -json` event stream. Only addresses, types, actions, and reasons are read; attribute values
  * (which hold secrets in plain text in a `show -json` document) are never copied out.
  */
+import { readFileSync } from "node:fs";
+import { CliError } from "../errors.js";
 import {
   decodeAction,
   metadataType,
@@ -134,6 +136,21 @@ export function parseShowDocument(doc: Json): PlanEvents {
     unrecognizedTypes,
     unrecognizedVersions,
   };
+}
+
+/** Reads saved plan input with the same strict parsing for plan and drift. */
+export function readPlanFile(path: string): PlanEvents {
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    throw new CliError(`cannot read plan file: ${path}`);
+  }
+  try {
+    return parsePlanFile(text);
+  } catch (error) {
+    throw new CliError(error instanceof Error ? error.message : String(error));
+  }
 }
 
 /** Accepts a whole `show -json` document or a `plan -json` event stream. */

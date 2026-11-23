@@ -22,6 +22,7 @@ See the [README command reference](https://github.com/Dematom1/terraform-axi#com
 | `terraform-axi plan <module> [--binary terraform\|tofu] [--wrapper command] [--timeout seconds] [--full]`       | Run the binary directly instead of the wrapper, cap the plan time (default 1800s), or list every low-risk row          |
 | `terraform-axi plan --plan-json <file>`                                                     | Same summary from a saved `show -json <planfile>` document or `plan -json` stream                                      |
 | `terraform-axi drift <module> [--binary terraform\|tofu] [--wrapper command] [--full]`                                   | Drift from a refresh-only plan: drifted resources and a human-only accept command                                      |
+| `terraform-axi drift --plan-json <file> [--full]`                                          | Drift from a saved JSON plan; no Terraform execution or human-only accept command                                      |
 | `terraform-axi lint <module> [--binary terraform\|tofu] [--wrapper command]`                                   | Read-only fmt check, initialized validate, and optional tflint; structured findings and count                         |
 | `terraform-axi diagnose <file\|-> [--full]`                                                | Value-free failures (address, provider, operation, HTTP status, permission hint) and a plan/apply summary from a saved `plan\|apply -json` stream or text log |
 | `terraform-axi doctor [module] [--offline]`                                                  | Backend, credential and unauthenticated reachability diagnostics; no init or state access                              |
@@ -34,7 +35,7 @@ See the [README command reference](https://github.com/Dematom1/terraform-axi#com
 
 Plan lists default to `address`, `action`, `type`, and `risk`, with all high-risk rows and the first 25 low-risk rows. `--fields address,action,flags,reason` selects explicit columns. `--full` returns every row and all detail fields unless `--fields` overrides them. Saved-plan recovery hints retain `--plan-json`, expectations, and field selectors.
 
-Drift lists default to 20 rows and report the total drifted count. When truncated, the recovery command preserves the module and `--binary` or `--wrapper` selector; `--full` returns every drift row.
+Drift lists default to 20 rows and report the total drifted count. When truncated, the recovery command preserves `--plan-json` or the module and `--binary` or `--wrapper` selector; `--full` returns every drift row.
 
 State lists default to 100 resources. Truncated attributes report their original character counts. Recovery hints preserve the module, address, and `--wrapper` selector; `--full` never disables secret redaction. Usage errors exit 2, operational errors exit 1, and `--help` works alongside command input without running the operation.
 

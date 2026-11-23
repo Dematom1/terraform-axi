@@ -1,12 +1,11 @@
-import { readFileSync } from "node:fs";
 import { commandLine, parseArgs } from "../args.js";
 import type { Config } from "../config.js";
-import { CliError, ReportError, UsageError } from "../errors.js";
+import { ReportError, UsageError } from "../errors.js";
 import { run, RUNNER_OPTIONS, selectRunConfig } from "../runner.js";
 import { diagnosticMetadata, metadataAddress, reasonCode, parsePlanEvents, type PlanEvents } from "./events.js";
 import { evaluateExpect, parseExpect, type ExpectedCounts } from "./expect.js";
 import { classifyRisks } from "./risk.js";
-import { parsePlanFile } from "./show.js";
+import { readPlanFile } from "./show.js";
 
 /**
  * The exact plan argv. `-lock=false` keeps a read-only plan from writing a lock to the backend, and there is
@@ -110,17 +109,7 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
   let stdout = "";
   let exitCode = 0;
   if (planJson) {
-    let text: string;
-    try {
-      text = readFileSync(planJson, "utf8");
-    } catch {
-      throw new CliError(`cannot read plan file: ${planJson}`);
-    }
-    try {
-      events = parsePlanFile(text);
-    } catch (error) {
-      throw new CliError(error instanceof Error ? error.message : String(error));
-    }
+    events = readPlanFile(planJson);
     source = { plan_json: planJson };
   } else {
     const runConfig = selectRunConfig(config, {

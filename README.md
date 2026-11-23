@@ -73,7 +73,7 @@ JSON-looking lines (starting with `{`, `[`, `"`, a number, or the literals `true
 
 Plan and drift diagnostics emit severity and a fixed category only, never provider-controlled summary, detail, or diagnostic address text. Failed subprocess stdout/stderr excerpts are withheld, including failures outside Terraform's normal exit codes. No environment-based secret guessing is used. Resource addresses retain structural names but withhold quoted instance keys; reason codes and resource types are allowlisted; unsupported resource types and versions are emitted as `unrecognized` and counted, while versions accept numeric releases with up to three digits per component and optional alpha, beta, or rc prereleases with up to two digits; build metadata and other versions are `unrecognized`. `--full` expands the row limit, not diagnostic detail. There is no unsafe diagnostic-text opt-in; investigate provider errors separately in a trusted terminal.
 
-Drift currently requires a live refresh-only plan; offline drift artifact input remains a follow-up. Offline plan review is available through `plan --plan-json`.
+Use `drift --plan-json <file>` to inspect drift offline from a saved `plan -json` stream or `show -json <planfile>` document. Like `plan --plan-json`, file input is strict: wrapper progress is not tolerated. Give exactly one of a module or `--plan-json`; `--binary` and `--wrapper` are live-only selectors. Offline drift reports `plan_json` as its source and omits the `human_only` accept command because no module is selected.
 
 ## Session memory
 
@@ -98,6 +98,7 @@ Known SDK limitation: `axi-sdk-js` 0.1.13 does not honor `CLAUDE_CONFIG_DIR`. Ho
 | `terraform-axi plan <module> [--binary terraform\|tofu] [--wrapper command] [--timeout seconds] [--full]`       | Run the binary directly instead of the wrapper, cap the plan time (default 1800s), or list every low-risk row          |
 | `terraform-axi plan --plan-json <file>`                                                     | Same summary from a saved `show -json <planfile>` document or `plan -json` stream                                      |
 | `terraform-axi drift <module> [--binary terraform\|tofu] [--wrapper command] [--full]`                                   | Drift from a refresh-only plan: drifted resources and a human-only accept command                                      |
+| `terraform-axi drift --plan-json <file> [--full]`                                          | Drift from a saved JSON plan; no Terraform execution or human-only accept command                                      |
 | `terraform-axi lint <module> [--binary terraform\|tofu] [--wrapper command]`                                   | Read-only fmt check, initialized validate, and optional tflint; structured findings and count                         |
 | `terraform-axi diagnose <file\|-> [--full]`                                                | Value-free failures (address, provider, operation, HTTP status, permission hint) and a plan/apply summary from a saved `plan\|apply -json` stream or text log |
 | `terraform-axi doctor [module] [--offline]`                                                  | Backend, credential and unauthenticated reachability diagnostics; no init or state access                              |
@@ -110,7 +111,7 @@ Known SDK limitation: `axi-sdk-js` 0.1.13 does not honor `CLAUDE_CONFIG_DIR`. Ho
 
 Plan lists default to `address`, `action`, `type`, and `risk`, with all high-risk rows and the first 25 low-risk rows. `--fields address,action,flags,reason` selects explicit columns. `--full` returns every row and all detail fields unless `--fields` overrides them. Saved-plan recovery hints retain `--plan-json`, expectations, and field selectors.
 
-Drift lists default to 20 rows and report the total drifted count. When truncated, the recovery command preserves the module and `--binary` or `--wrapper` selector; `--full` returns every drift row.
+Drift lists default to 20 rows and report the total drifted count. When truncated, the recovery command preserves `--plan-json` or the module and `--binary` or `--wrapper` selector; `--full` returns every drift row.
 
 State lists default to 100 resources. Truncated attributes report their original character counts. Recovery hints preserve the module, address, and `--wrapper` selector; `--full` never disables secret redaction. Usage errors exit 2, operational errors exit 1, and `--help` works alongside command input without running the operation.
 
