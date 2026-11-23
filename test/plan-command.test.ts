@@ -231,7 +231,9 @@ describe("secret-safe plan and drift output", () => {
     const result = tfaxi(["plan", "m", "--full"], { TF_AXI_FIXTURE: stream });
     expect(result.stdout).not.toContain(sentinel);
     expect(JSON.stringify(result.report).match(/"type":"withheld"/g)).toHaveLength(2);
-    expect(JSON.stringify(result.report)).toContain('"type":"azurerm_sentinel_data_connector_microsoft_defender_advanced_threat_protection"');
+    expect(JSON.stringify(result.report)).toContain(
+      '"type":"azurerm_sentinel_data_connector_microsoft_defender_advanced_threat_protection"',
+    );
 
     const document = join(home, "unsafe-show.json");
     writeFileSync(
