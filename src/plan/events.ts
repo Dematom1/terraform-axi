@@ -9,7 +9,14 @@
 /** Display action. `unknown` is any action value this decoder does not recognize; its raw value is kept. */
 export type PlanAction =
   "create" | "update" | "REPLACE" | "DESTROY" | "read" | "move" | "import" | "forget" | "unknown";
-export type PlanChange = { address: string; action: PlanAction; type?: string; riskType?: string; reason?: string; raw?: string };
+export type PlanChange = {
+  address: string;
+  action: PlanAction;
+  type?: string;
+  riskType?: string;
+  reason?: string;
+  raw?: string;
+};
 export type PlanOutput = { name: string; action: PlanAction | "noop"; sensitive: boolean; raw?: string };
 export type PlanSummary = { add: number; change: number; destroy: number; import?: number; forget?: number };
 export type PlanDiagnostic = { severity: string; summary: string; detail?: string; address?: string };
@@ -166,7 +173,10 @@ export function metadataType(type: string): string {
 }
 
 export function safeVersion(version: string | undefined): string | undefined {
-  return version && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:alpha|beta|rc)\d*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(version)
+  return version &&
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:alpha|beta|rc)\d*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(
+      version,
+    )
     ? version
     : undefined;
 }

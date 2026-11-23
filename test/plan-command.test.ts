@@ -216,7 +216,10 @@ describe("secret-safe plan and drift output", () => {
       },
       {
         type: "planned_change",
-        change: { resource: { addr: "terraform_data.secret", resource_type: "aws_secretsmanager_secret_rotation" }, action: "create" },
+        change: {
+          resource: { addr: "terraform_data.secret", resource_type: "aws_secretsmanager_secret_rotation" },
+          action: "create",
+        },
       },
       {
         type: "planned_change",
@@ -240,9 +243,16 @@ describe("secret-safe plan and drift output", () => {
     expect(result.report.unrecognized_versions).toBe(1);
     expect(JSON.stringify(result.report).match(/"type":"unrecognized"/g)).toHaveLength(3);
     expect(result.report.unrecognized_types).toBe(3);
-    expect(result.report.changes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ address: "terraform_data.secret", type: "unrecognized", risk: "high", flags: "secret" }),
-    ]));
+    expect(result.report.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          address: "terraform_data.secret",
+          type: "unrecognized",
+          risk: "high",
+          flags: "secret",
+        }),
+      ]),
+    );
     expect(JSON.stringify(result.report)).toContain(
       '"type":"azurerm_sentinel_data_connector_microsoft_defender_advanced_threat_protection"',
     );

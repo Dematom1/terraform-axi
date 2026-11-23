@@ -339,8 +339,13 @@ it("omits invalid version values while retaining valid Terraform versions and bu
 it("reports unrecognized metadata counters in diagnose output", () => {
   const stream = [
     { type: "version", terraform: "1.2.3-secret" },
-    { type: "apply_complete", hook: { resource: { addr: "aws_instance.example", resource_type: "custom_secret_type" } } },
-  ].map((event) => JSON.stringify(event)).join("\n");
+    {
+      type: "apply_complete",
+      hook: { resource: { addr: "aws_instance.example", resource_type: "custom_secret_type" } },
+    },
+  ]
+    .map((event) => JSON.stringify(event))
+    .join("\n");
   expect(diagnose(["-"], stream).data).toMatchObject({
     unrecognized_versions: 1,
     unrecognized_types: 1,
