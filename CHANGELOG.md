@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.8](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.7...terraform-axi-v0.1.8) (2026-11-23)
+
+
+### Features
+
+* add offline drift from saved plans ([#41](https://github.com/Dematom1/terraform-axi/issues/41)) ([4003056](https://github.com/Dematom1/terraform-axi/commit/40030561233e0280060ff7c01de69a11144ffb0f))
+* **cli:** support per-invocation wrapper overrides ([#39](https://github.com/Dematom1/terraform-axi/issues/39)) ([af7e911](https://github.com/Dematom1/terraform-axi/commit/af7e9111a4d330858c412d744c9910ec8180fcd9))
+
 ## [0.1.7](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.6...terraform-axi-v0.1.7) (2026-11-23)
 
 
