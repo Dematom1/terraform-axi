@@ -45,7 +45,7 @@ export const isSecretType = matcher(SECRET_TYPES);
 export function classifyRisks(events: PlanEvents): RiskRow[] {
   const rows: RiskRow[] = events.changes.map((change) => {
     const flags: RiskFlag[] = [];
-    const type = change.type ?? "";
+    const type = change.riskType ?? change.type ?? "";
     if (change.action === "DESTROY" || change.action === "REPLACE") flags.push("destroy");
     if (change.action === "REPLACE") flags.push(`replace(${reasonCode(change.reason)})`);
     if (change.action === "unknown") flags.push("unknown");
