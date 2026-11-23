@@ -3,7 +3,15 @@
  * `plan -json` event stream. Only addresses, types, actions, and reasons are read; attribute values
  * (which hold secrets in plain text in a `show -json` document) are never copied out.
  */
-import { decodeAction, metadataType, parsePlanEvents, safeVersion, type PlanChange, type PlanEvents, type PlanOutput } from "./events.js";
+import {
+  decodeAction,
+  metadataType,
+  parsePlanEvents,
+  safeVersion,
+  type PlanChange,
+  type PlanEvents,
+  type PlanOutput,
+} from "./events.js";
 
 type Json = Record<string, unknown>;
 const isRecord = (value: unknown): value is Json =>

@@ -145,9 +145,7 @@ export function metadataType(type: string): string {
 }
 
 export function safeVersion(version: string | undefined): string | undefined {
-  return version && /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,32})?$/.test(version)
-    ? version
-    : undefined;
+  return version && /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,32})?$/.test(version) ? version : undefined;
 }
 
 export function metadataAddress(address: string): string {
