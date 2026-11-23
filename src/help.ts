@@ -17,6 +17,7 @@ export function commandHelp(
           "--plan-json <file>: read a saved JSON plan instead of running a module",
           "--expect add=N,change=N,destroy=N: assert counts",
           "--binary terraform|tofu: bypass configured wrapper",
+          "--wrapper <command>: override configured wrapper for this invocation",
           "--timeout <seconds>",
           "--full: all rows and detail fields",
           "--fields address,action,type,risk,flags,reason: select columns",
@@ -39,7 +40,12 @@ export function commandHelp(
     case "drift":
       return {
         usage: driftUsage,
-        flags: ["--binary terraform|tofu: bypass configured wrapper", "--full: all drift rows", universal],
+        flags: [
+          "--binary terraform|tofu: bypass configured wrapper",
+          "--wrapper <command>: per-invocation wrapper",
+          "--full: all drift rows",
+          universal,
+        ],
         defaults: "600 seconds; first 20 drift rows (--full lists all); configured binary/wrapper (auto if unset)",
         runs: DRIFT_ARGS.join(" "),
         diagnostics: "metadata only; provider text and subprocess excerpts withheld",
@@ -55,7 +61,11 @@ export function commandHelp(
     case "lint":
       return {
         usage: lintUsage,
-        flags: ["--binary terraform|tofu: bypass configured wrapper", universal],
+        flags: [
+          "--binary terraform|tofu: bypass configured wrapper",
+          "--wrapper <command>: per-invocation wrapper",
+          universal,
+        ],
         defaults: "60 seconds per check; configured binary/wrapper (auto if unset)",
         runs: "fmt -check; validate -json only with a data directory; tflint if installed",
         never: "init or format writes",
@@ -96,10 +106,10 @@ export function commandHelp(
     case "state": {
       const resource = subcommand === "resource";
       const usage = resource
-        ? "terraform-axi state resource <module> <address> [--full]"
+        ? "terraform-axi state resource <module> <address> [--full] [--wrapper command]"
         : subcommand === "list"
-          ? "terraform-axi state list <module> [--full]"
-          : "terraform-axi state list <module> [--full] | state resource <module> <address> [--full]";
+          ? "terraform-axi state list <module> [--full] [--wrapper command]"
+          : "terraform-axi state list <module> [--full] [--wrapper command] | state resource <module> <address> [--full] [--wrapper command]";
       const examples = resource
         ? [
             "terraform-axi state resource infra/prod terraform_data.example",
@@ -115,7 +125,7 @@ export function commandHelp(
         : "--full: list every resource and resolve types from state.";
       return {
         usage,
-        flags: [detail, universal],
+        flags: [detail, "--wrapper <command>: override configured wrapper for this invocation", universal],
         defaults: resource
           ? "attribute previews 200 characters; secrets always redacted"
           : subcommand === "list"

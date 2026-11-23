@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
-import { CliError } from "./errors.js";
+import { CliError, UsageError } from "./errors.js";
 import { diagnosticMetadata, parsePlanEvents } from "./plan/events.js";
 import type { Config } from "./config.js";
 
@@ -157,6 +157,23 @@ export function assertAllowed(args: string[]): void {
 }
 export function validateWrapper(wrapper: string): void {
   wrapperArgs(wrapper, "module", []);
+}
+
+export const RUNNER_OPTIONS = [{ name: "--binary", values: ["terraform", "tofu"] }, { name: "--wrapper" }] as const;
+
+export function selectRunConfig(config: Config, values: Record<string, string[] | undefined>): Config {
+  const binary = values["--binary"]?.[0];
+  const wrapper = values["--wrapper"]?.[0];
+  if (binary && wrapper) throw new UsageError("--binary and --wrapper cannot be used together");
+  if (wrapper) {
+    try {
+      validateWrapper(wrapper);
+    } catch (error) {
+      throw new UsageError(error instanceof Error ? error.message : "invalid wrapper");
+    }
+    return { ...config, wrapper };
+  }
+  return binary === "terraform" || binary === "tofu" ? { binary, modules: config.modules } : config;
 }
 
 export function wrapperArgs(wrapper: string, module: string, args: string[]): [string, string[]] {

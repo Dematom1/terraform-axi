@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { stateCommand } from "../src/commands/state.js";
 
 const runOperation = vi.hoisted(() => vi.fn());
-vi.mock("../src/runner.js", () => ({ runOperation }));
+vi.mock("../src/runner.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/runner.js")>()),
+  runOperation,
+}));
 const config = { binary: "auto" as const, modules: [] };
 const state = (resources: unknown[]) => JSON.stringify({ values: { root_module: { resources } } });
 const terraformData = (address: string, input: string) => ({
@@ -86,6 +89,25 @@ describe("state command", () => {
     runOperation.mockResolvedValueOnce(result(""));
     expect(await invoke("list", "mod", "--full")).toMatchObject({ status: "empty_state", total: 0 });
     expect(runOperation).toHaveBeenCalledOnce();
+  });
+
+  it("uses and preserves a per-invocation wrapper", async () => {
+    runOperation.mockResolvedValue(
+      result(
+        state([
+          {
+            address: "test_resource.example",
+            type: "test_resource",
+            instances: [{ attributes: { label: "x".repeat(250) }, sensitive_values: {} }],
+          },
+        ]),
+      ),
+    );
+    const output = JSON.stringify(
+      await invoke("resource", "mod", "test_resource.example", "--wrapper", "tool {module}"),
+    );
+    expect(runOperation).toHaveBeenCalledWith({ ...config, wrapper: "tool {module}" }, "mod", "show_state");
+    expect(output).toContain("--wrapper 'tool {module}'");
   });
 
   it("does not echo malformed state JSON", async () => {

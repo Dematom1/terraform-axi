@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { commandLine, parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { CliError, ReportError, UsageError } from "../errors.js";
-import { run } from "../runner.js";
+import { run, RUNNER_OPTIONS, selectRunConfig } from "../runner.js";
 import { diagnosticMetadata, metadataAddress, reasonCode, parsePlanEvents, type PlanEvents } from "./events.js";
 import { evaluateExpect, parseExpect, type ExpectedCounts } from "./expect.js";
 import { classifyRisks } from "./risk.js";
@@ -15,7 +15,7 @@ import { parsePlanFile } from "./show.js";
 export const PLAN_ARGS = ["plan", "-json", "-input=false", "-lock=false", "-detailed-exitcode"];
 const FAILED_EXIT = 1;
 export const usage =
-  "terraform-axi plan <module> [--expect add=N,change=N,destroy=N] [--binary terraform|tofu] [--timeout seconds] [--full] [--fields columns] | terraform-axi plan --plan-json <file> [--expect ...] [--full] [--fields columns]";
+  "terraform-axi plan <module> [--expect add=N,change=N,destroy=N] [--binary terraform|tofu|--wrapper command] [--timeout seconds] [--full] [--fields columns] | terraform-axi plan --plan-json <file> [--expect ...] [--full] [--fields columns]";
 const DEFAULT_TIMEOUT_SECONDS = 30 * 60;
 const MAX_TIMEOUT_SECONDS = 2_147_483;
 const LOW_RISK_SHOWN = 25;
@@ -103,7 +103,7 @@ export function renderPlan(
 }
 
 export async function planCommand(args: string[], config: Config): Promise<Record<string, unknown>> {
-  const { module, planJson, expected, full, binary, timeout, fields, invocation } = parsePlanArgs(args);
+  const { module, planJson, expected, full, binary, wrapper, timeout, fields, invocation } = parsePlanArgs(args);
   let events: PlanEvents;
   let source: Record<string, string>;
   let stderr = "";
@@ -123,8 +123,10 @@ export async function planCommand(args: string[], config: Config): Promise<Recor
     }
     source = { plan_json: planJson };
   } else {
-    // `--binary` runs that executable directly, bypassing any configured wrapper.
-    const runConfig: Config = binary ? { binary, modules: config.modules } : config;
+    const runConfig = selectRunConfig(config, {
+      ...(binary ? { "--binary": [binary] } : {}),
+      ...(wrapper ? { "--wrapper": [wrapper] } : {}),
+    });
     const result = await run(runConfig, module!, timeout * 1000, {
       args: PLAN_ARGS,
       exitCodes: [1, 2],
@@ -178,6 +180,7 @@ export function parsePlanArgs(args: string[]): {
   expected?: ExpectedCounts;
   full: boolean;
   binary?: "terraform" | "tofu";
+  wrapper?: string;
   timeout: number;
   fields?: Field[];
   invocation: string;
@@ -187,7 +190,7 @@ export function parsePlanArgs(args: string[]): {
     { name: "--fields" },
     { name: "--expect" },
     { name: "--plan-json" },
-    { name: "--binary", values: ["terraform", "tofu"] },
+    ...RUNNER_OPTIONS,
     { name: "--timeout" },
   ]);
   const full = parsed.values["--full"] !== undefined;
@@ -202,8 +205,12 @@ export function parsePlanArgs(args: string[]): {
   if (!module && !planJson) throw new UsageError(`plan needs a module or --plan-json <file>; usage: ${usage}`);
   if (module && planJson) throw new UsageError("give a module or --plan-json <file>, not both");
   const binary = parsed.values["--binary"]?.[0] as "terraform" | "tofu" | undefined;
+  const wrapper = parsed.values["--wrapper"]?.[0];
   const timeoutText = parsed.values["--timeout"]?.[0];
-  if (planJson && (binary || timeoutText)) throw new UsageError("--binary and --timeout apply only to plan <module>");
+  if (planJson && (binary || wrapper || timeoutText))
+    throw new UsageError("--binary, --wrapper, and --timeout apply only to plan <module>");
+  if (binary && wrapper) throw new UsageError("--binary and --wrapper cannot be used together");
+  if (wrapper) selectRunConfig({ binary: "auto", modules: [] }, { "--wrapper": [wrapper] });
   const timeout = timeoutText === undefined ? DEFAULT_TIMEOUT_SECONDS : Number(timeoutText);
   if (!/^\d+$/.test(timeoutText ?? "1") || !Number.isSafeInteger(timeout) || timeout < 1)
     throw new UsageError(`--timeout must be a whole number of seconds, got ${timeoutText}`);
@@ -222,6 +229,7 @@ export function parsePlanArgs(args: string[]): {
     ...(planJson ? { planJson } : {}),
     ...(expected ? { expected } : {}),
     ...(binary ? { binary } : {}),
+    ...(wrapper ? { wrapper } : {}),
     full,
     timeout,
     ...(fields ? { fields } : {}),

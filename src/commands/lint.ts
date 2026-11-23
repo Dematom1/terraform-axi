@@ -3,10 +3,10 @@ import { resolve } from "node:path";
 import { commandLine, parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { ReportError, UsageError } from "../errors.js";
-import { execute, run } from "../runner.js";
+import { execute, run, RUNNER_OPTIONS, selectRunConfig } from "../runner.js";
 
 const TIMEOUT_MS = 60_000;
-export const lintUsage = "terraform-axi lint <module> [--binary terraform|tofu]";
+export const lintUsage = "terraform-axi lint <module> [--binary terraform|tofu|--wrapper command]";
 type Finding = { file: string | null; line: number | null; rule: string; severity: string; message: string };
 type Check = { check: string; status: "passed" | "skipped" | "error"; reason: string };
 const object = (value: unknown): Record<string, unknown> => {
@@ -56,7 +56,7 @@ function diagnostics(stdout: string, tool: "validate" | "tflint"): Finding[] {
 }
 
 export async function lint(args: string[], config: Config): Promise<Record<string, unknown>> {
-  const parsed = parseArgs(args, [{ name: "--binary", values: ["terraform", "tofu"] }]);
+  const parsed = parseArgs(args, RUNNER_OPTIONS);
   const module = parsed.command;
   if (!module || parsed.positional.length) throw new UsageError(`expected exactly one module; usage: ${lintUsage}`);
   const directory = resolve(module);
@@ -66,7 +66,8 @@ export async function lint(args: string[], config: Config): Promise<Record<strin
     throw new UsageError(`module directory not found: ${module}`);
   }
   const binary = parsed.values["--binary"]?.[0];
-  const settings: Config = binary === "terraform" || binary === "tofu" ? { binary, modules: config.modules } : config;
+  const wrapper = parsed.values["--wrapper"]?.[0];
+  const settings = selectRunConfig(config, parsed.values);
   const findings: Finding[] = [];
   const checks: Check[] = [];
   const check = async (name: string, action: () => Promise<void>) => {
@@ -168,7 +169,7 @@ export async function lint(args: string[], config: Config): Promise<Record<strin
     ...(findings.some((finding) => finding.severity === "error")
       ? {
           help: [
-            `Fix the reported files, then rerun \`${commandLine(["lint", module, ...(binary ? ["--binary", binary] : [])])}\``,
+            `Fix the reported files, then rerun \`${commandLine(["lint", module, ...(binary ? ["--binary", binary] : wrapper ? ["--wrapper", wrapper] : [])])}\``,
           ],
         }
       : {}),

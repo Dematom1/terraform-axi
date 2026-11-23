@@ -51,8 +51,8 @@ describe("setup contract", () => {
     expect(result.report).toMatchObject({
       usage:
         command === "list"
-          ? "terraform-axi state list <module> [--full]"
-          : "terraform-axi state resource <module> <address> [--full]",
+          ? "terraform-axi state list <module> [--full] [--wrapper command]"
+          : "terraform-axi state resource <module> <address> [--full] [--wrapper command]",
       help: expect.arrayContaining([
         expect.stringContaining("Required:"),
         expect.stringContaining("--full:"),
