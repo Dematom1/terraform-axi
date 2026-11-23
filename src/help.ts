@@ -106,10 +106,10 @@ export function commandHelp(
     case "state": {
       const resource = subcommand === "resource";
       const usage = resource
-        ? "terraform-axi state resource <module> <address> [--full] [--wrapper command]"
+        ? "terraform-axi state resource <module> <address> [--full] [--binary terraform|tofu|--wrapper command]"
         : subcommand === "list"
-          ? "terraform-axi state list <module> [--full] [--wrapper command]"
-          : "terraform-axi state list <module> [--full] [--wrapper command] | state resource <module> <address> [--full] [--wrapper command]";
+          ? "terraform-axi state list <module> [--full] [--binary terraform|tofu|--wrapper command]"
+          : "terraform-axi state list <module> [--full] [--binary terraform|tofu|--wrapper command] | state resource <module> <address> [--full] [--binary terraform|tofu|--wrapper command]";
       const examples = resource
         ? [
             "terraform-axi state resource infra/prod terraform_data.example",

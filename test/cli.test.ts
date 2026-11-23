@@ -176,7 +176,7 @@ describe("terraform-axi scaffold", () => {
     });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(
-      "state list <module> [--full] [--wrapper command] | state resource <module> <address> [--full] [--wrapper command]",
+      "state list <module> [--full] [--binary terraform|tofu|--wrapper command] | state resource <module> <address> [--full] [--binary terraform|tofu|--wrapper command]",
     );
     expect(result.stdout).not.toContain("NOT_IMPLEMENTED");
   });

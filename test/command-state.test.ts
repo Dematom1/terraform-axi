@@ -110,6 +110,32 @@ describe("state command", () => {
     expect(output).toContain("--wrapper 'tool {module}'");
   });
 
+  it("preserves --binary in every recovery command", async () => {
+    const addresses = Array.from({ length: 101 }, (_, i) => `test_resource.item${i}`).join("\n");
+    runOperation.mockResolvedValue(result(`${addresses}\n`));
+    const listed = JSON.stringify(await invoke("list", "mod", "--binary", "tofu"));
+    expect(listed).toContain("state resource mod '<address>' --binary tofu");
+    expect(listed).toContain("state list mod --full --binary tofu");
+
+    runOperation.mockResolvedValue(result(state([{ address: "test_resource.existing", type: "test_resource" }])));
+    const missing = JSON.stringify(await invoke("resource", "mod", "test_resource.missing", "--binary", "tofu"));
+    expect(missing).toContain("state list mod --full --binary tofu");
+
+    runOperation.mockResolvedValue(
+      result(
+        state([
+          {
+            address: "test_resource.example",
+            type: "test_resource",
+            instances: [{ attributes: { label: "x".repeat(250) }, sensitive_values: {} }],
+          },
+        ]),
+      ),
+    );
+    const truncated = JSON.stringify(await invoke("resource", "mod", "test_resource.example", "--binary", "tofu"));
+    expect(truncated).toContain("state resource mod test_resource.example --full --binary tofu");
+  });
+
   it("does not echo malformed state JSON", async () => {
     runOperation.mockResolvedValue(result('{"secret":"hunter2"'));
     await expect(stateCommand(config, ["resource", "mod", "terraform_data.secret"])).rejects.toThrow(

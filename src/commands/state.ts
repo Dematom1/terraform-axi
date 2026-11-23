@@ -65,11 +65,15 @@ function cut(value: unknown): unknown {
 export async function stateCommand(config: Config, argv: string[]): Promise<string> {
   const { command, positional, values } = parseArgs(argv, [...RUNNER_OPTIONS, { name: "--full", boolean: true }]);
   const full = values["--full"] !== undefined;
+  const binary = values["--binary"]?.[0];
   const wrapper = values["--wrapper"]?.[0];
+  const runnerFlags = binary ? ["--binary", binary] : wrapper ? ["--wrapper", wrapper] : [];
   const runConfig = selectRunConfig(config, values);
   if (command === "list") {
     if (positional.length !== 1)
-      throw new UsageError("usage: terraform-axi state list <module> [--full] [--wrapper command]");
+      throw new UsageError(
+        "usage: terraform-axi state list <module> [--full] [--binary terraform|tofu|--wrapper command]",
+      );
     const module = positional[0]!;
     const addresses = (await runOperation(runConfig, module, "state_list")).stdout
       .trim()
@@ -87,10 +91,10 @@ export async function stateCommand(config: Config, argv: string[]): Promise<stri
         .map((address) => ({ address, type: types.get(address) ?? resourceType(address) })),
       total: addresses.length,
       help: [
-        `Run \`${commandLine(["state", "resource", module, "<address>", ...(wrapper ? ["--wrapper", wrapper] : [])])}\` to inspect a resource`,
+        `Run \`${commandLine(["state", "resource", module, "<address>", ...runnerFlags])}\` to inspect a resource`,
         ...(!full && addresses.length > 100
           ? [
-              `Run \`${commandLine(["state", "list", module, "--full", ...(wrapper ? ["--wrapper", wrapper] : [])])}\` to list all ${addresses.length} resources`,
+              `Run \`${commandLine(["state", "list", module, "--full", ...runnerFlags])}\` to list all ${addresses.length} resources`,
             ]
           : []),
       ],
@@ -98,7 +102,9 @@ export async function stateCommand(config: Config, argv: string[]): Promise<stri
   }
   if (command === "resource") {
     if (positional.length !== 2)
-      throw new UsageError("usage: terraform-axi state resource <module> <address> [--full] [--wrapper command]");
+      throw new UsageError(
+        "usage: terraform-axi state resource <module> <address> [--full] [--binary terraform|tofu|--wrapper command]",
+      );
     const module = positional[0]!;
     const address = positional[1]!;
     const model = parse((await runOperation(runConfig, module, "show_state")).stdout);
@@ -113,7 +119,7 @@ export async function stateCommand(config: Config, argv: string[]): Promise<stri
         status: model.resources.length ? "not_found" : "empty_state",
         ...(model.resources.length ? { address, closest } : {}),
         help: [
-          `Run \`${commandLine(["state", "list", module, "--full", ...(wrapper ? ["--wrapper", wrapper] : [])])}\` to find an exact resource address`,
+          `Run \`${commandLine(["state", "list", module, "--full", ...runnerFlags])}\` to find an exact resource address`,
         ],
       });
     }
@@ -126,11 +132,13 @@ export async function stateCommand(config: Config, argv: string[]): Promise<stri
       ...(truncated
         ? {
             help: [
-              `Run \`${commandLine(["state", "resource", module, address, "--full", ...(wrapper ? ["--wrapper", wrapper] : [])])}\` to see complete attributes (secrets remain redacted)`,
+              `Run \`${commandLine(["state", "resource", module, address, "--full", ...runnerFlags])}\` to see complete attributes (secrets remain redacted)`,
             ],
           }
         : {}),
     });
   }
-  throw new UsageError("usage: terraform-axi state list <module> | state resource <module> <address>");
+  throw new UsageError(
+    "usage: terraform-axi state list <module> [--full] [--binary terraform|tofu|--wrapper command] | state resource <module> <address> [--full] [--binary terraform|tofu|--wrapper command]",
+  );
 }
