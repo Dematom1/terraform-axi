@@ -139,12 +139,11 @@ describe("offline drift", () => {
       }),
     );
     const { status, output } = drift(["--plan-json", file]);
-    const stream = drift(["--plan-json", fixture("terraform-1.15.8-drift")]);
     expect(status).toBe(0);
     expect(output).toMatchObject({
-      status: stream.output.status,
-      drifted: stream.output.drifted,
-      drift: stream.output.drift,
+      status: "drift detected",
+      drifted: 1,
+      drift: [{ action: "delete", address: "local_file.drifted" }],
     });
     expect(output).not.toHaveProperty("human_only");
   });
