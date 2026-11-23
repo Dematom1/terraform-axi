@@ -216,7 +216,7 @@ describe("secret-safe plan and drift output", () => {
       { type: "change_summary", changes: { add: 0, change: 1, remove: 0 } },
     ];
     const stream = join(home, "unsafe.jsonl");
-    writeFileSync(stream, events.map(JSON.stringify).join("\n"));
+    writeFileSync(stream, events.map((event) => JSON.stringify(event)).join("\n"));
     withFakeWrapper();
     const result = tfaxi(["plan", "m", "--full"], { TF_AXI_FIXTURE: stream });
     expect(result.stdout).not.toContain(sentinel);
