@@ -99,7 +99,7 @@ function decodeChange(event: Json): PlanChange | undefined {
   if (action === "noop") return undefined;
   const row: PlanChange = { address, action };
   const type = str(resource.resource_type);
-  if (type) row.type = type;
+  if (type) row.type = metadataType(type);
   const reason = str(change.reason) ?? str(change.action_reason);
   if (reason) row.reason = reason;
   if (raw !== undefined) row.raw = raw;
@@ -140,6 +140,16 @@ const REASON_CODES = new Set([
 
 /** Unknown reason/action text and for_each keys can contain provider-sensitive values. */
 export const reasonCode = (reason: string | undefined) => (reason && REASON_CODES.has(reason) ? reason : "unknown");
+export function metadataType(type: string): string {
+  return /^[A-Za-z_][\w-]{0,63}$/.test(type) ? type : "withheld";
+}
+
+export function safeVersion(version: string | undefined): string | undefined {
+  return version && /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,32})?$/.test(version)
+    ? version
+    : undefined;
+}
+
 export function metadataAddress(address: string): string {
   const masked = address.replace(/\["(?:[^"\\]|\\.)*"\]/g, '["withheld"]').replace(/\[(\d{5,})\]/g, '["withheld"]');
   return /^(?:[\w-]+(?:\[(?:\d+|"withheld")\])?)(?:\.[\w-]+(?:\[(?:\d+|"withheld")\])?)*$/.test(masked)
@@ -187,7 +197,8 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
         const version = tofu ?? terraform;
         if (Boolean(tofu) !== Boolean(terraform)) {
           result.flavor = tofu ? "tofu" : "terraform";
-          if (version && /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,32})?$/.test(version)) result.version = version;
+          const safe = safeVersion(version);
+          if (safe) result.version = safe;
         }
         break;
       }
@@ -223,7 +234,7 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
           outcome: event.type === "apply_errored" ? "errored" : "complete",
         };
         const type = str(resource.resource_type);
-        if (type) row.type = type;
+        if (type) row.type = metadataType(type);
         const provider = str(resource.implied_provider);
         if (provider) row.provider = provider;
         (result.applied ??= []).push(row);

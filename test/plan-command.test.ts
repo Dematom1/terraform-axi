@@ -202,6 +202,32 @@ describe("secret-safe plan and drift output", () => {
     expect(result.report.diagnostics).toEqual([{ severity: "warning", category: "terraform_diagnostic" }]);
   });
 
+  it("withholds invalid resource types and show-document versions", () => {
+    const sentinel = "synthetic-provider-sensitive-value";
+    const events = [
+      { type: "planned_change", change: { resource: { addr: "terraform_data.planned", resource_type: `type ${sentinel}` }, action: "update" } },
+      { type: "resource_drift", change: { resource: { addr: "terraform_data.drifted", resource_type: `type ${sentinel}` }, action: "update" } },
+      { type: "change_summary", changes: { add: 0, change: 1, remove: 0 } },
+    ];
+    const stream = join(home, "unsafe.jsonl");
+    writeFileSync(stream, events.map(JSON.stringify).join("\n"));
+    withFakeWrapper();
+    const result = tfaxi(["plan", "m", "--full"], { TF_AXI_FIXTURE: stream });
+    expect(result.stdout).not.toContain(sentinel);
+    expect(JSON.stringify(result.report).match(/"type":"withheld"/g)).toHaveLength(2);
+
+    const document = join(home, "unsafe-show.json");
+    writeFileSync(document, JSON.stringify({
+      planned_values: {},
+      terraform_version: `1.15.8 ${sentinel}`,
+      resource_changes: [{ address: "terraform_data.item", type: `type ${sentinel}`, change: { actions: ["update"] } }],
+    }));
+    const showResult = tfaxi(["plan", "--plan-json", document, "--full"]);
+    expect(showResult.stdout).not.toContain(sentinel);
+    expect(showResult.report.version).toBeUndefined();
+    expect(JSON.stringify(showResult.report)).toContain('"type":"withheld"');
+  });
+
   it.each(["plan", "drift"])(
     "withholds diagnostics and failed excerpts for %s without environment secrets",
     (command) => {

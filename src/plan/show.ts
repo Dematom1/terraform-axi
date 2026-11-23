@@ -3,7 +3,7 @@
  * `plan -json` event stream. Only addresses, types, actions, and reasons are read; attribute values
  * (which hold secrets in plain text in a `show -json` document) are never copied out.
  */
-import { decodeAction, parsePlanEvents, type PlanChange, type PlanEvents, type PlanOutput } from "./events.js";
+import { decodeAction, metadataType, parsePlanEvents, safeVersion, type PlanChange, type PlanEvents, type PlanOutput } from "./events.js";
 
 type Json = Record<string, unknown>;
 const isRecord = (value: unknown): value is Json =>
@@ -33,7 +33,7 @@ function decodeResource(entry: unknown): PlanChange | undefined {
   }
   const row: PlanChange = { address, action };
   const type = str(entry.type);
-  if (type) row.type = type;
+  if (type) row.type = metadataType(type);
   const reason = str(entry.action_reason);
   if (reason) row.reason = REASONS[reason] ?? reason;
   if (raw !== undefined) row.raw = raw;
@@ -104,7 +104,7 @@ export function parseShowDocument(doc: Json): PlanEvents {
           ...(imports ? { import: imports } : {}),
           ...(tally("forget") ? { forget: tally("forget") } : {}),
         };
-  const version = str(doc.terraform_version);
+  const version = safeVersion(str(doc.terraform_version));
   return {
     flavor: "unknown",
     ...(version ? { version } : {}),
