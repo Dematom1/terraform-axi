@@ -49,6 +49,8 @@ export async function drift(args: string[], config: Config): Promise<Record<stri
   if (result.fallbackReason) report.note = result.fallbackReason;
   if (events.version)
     report.version = events.flavor === "unknown" ? events.version : `${events.flavor} ${events.version}`;
+  if (events.unrecognizedTypes) report.unrecognized_types = events.unrecognizedTypes;
+  if (events.unrecognizedVersions) report.unrecognized_versions = events.unrecognizedVersions;
 
   if (events.diagnostics.length) report.diagnostics = events.diagnostics.map(diagnosticMetadata);
   if (events.skippedWrapperOutput) report.skipped_wrapper_lines = events.skippedWrapperOutput;

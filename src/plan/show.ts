@@ -3,7 +3,15 @@
  * `plan -json` event stream. Only addresses, types, actions, and reasons are read; attribute values
  * (which hold secrets in plain text in a `show -json` document) are never copied out.
  */
-import { decodeAction, parsePlanEvents, type PlanChange, type PlanEvents, type PlanOutput } from "./events.js";
+import {
+  decodeAction,
+  metadataType,
+  parsePlanEvents,
+  safeVersion,
+  type PlanChange,
+  type PlanEvents,
+  type PlanOutput,
+} from "./events.js";
 
 type Json = Record<string, unknown>;
 const isRecord = (value: unknown): value is Json =>
@@ -33,7 +41,10 @@ function decodeResource(entry: unknown): PlanChange | undefined {
   }
   const row: PlanChange = { address, action };
   const type = str(entry.type);
-  if (type) row.type = type;
+  if (type) {
+    row.type = metadataType(type);
+    Object.defineProperty(row, "riskType", { value: type });
+  }
   const reason = str(entry.action_reason);
   if (reason) row.reason = REASONS[reason] ?? reason;
   if (raw !== undefined) row.raw = raw;
@@ -44,6 +55,7 @@ function decodeResource(entry: unknown): PlanChange | undefined {
 export function parseShowDocument(doc: Json): PlanEvents {
   const list = (value: unknown) => (Array.isArray(value) ? value : []);
   let malformed = 0;
+  let unrecognizedTypes = 0;
   const rows = (value: unknown) => {
     if (value !== undefined && !Array.isArray(value)) {
       malformed++;
@@ -55,6 +67,8 @@ export function parseShowDocument(doc: Json): PlanEvents {
         return [];
       }
       const row = decodeResource(entry);
+      const type = str(entry.type);
+      if (type && metadataType(type) === "unrecognized") unrecognizedTypes++;
       if (!row) {
         if (decodeAction(entry.change).action !== "noop") malformed++;
         return [];
@@ -104,10 +118,12 @@ export function parseShowDocument(doc: Json): PlanEvents {
           ...(imports ? { import: imports } : {}),
           ...(tally("forget") ? { forget: tally("forget") } : {}),
         };
-  const version = str(doc.terraform_version);
+  const rawVersion = str(doc.terraform_version);
+  const version = safeVersion(rawVersion);
+  const unrecognizedVersions = rawVersion && !version ? 1 : 0;
   return {
     flavor: "unknown",
-    ...(version ? { version } : {}),
+    ...(version ? { version } : rawVersion ? { version: "unrecognized" } : {}),
     changes,
     drift,
     summary,
@@ -115,6 +131,8 @@ export function parseShowDocument(doc: Json): PlanEvents {
     diagnostics: [],
     malformed,
     unknownEvents: 0,
+    unrecognizedTypes,
+    unrecognizedVersions,
   };
 }
 

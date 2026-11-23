@@ -172,6 +172,8 @@ export function parseTextLog(text: string): PlanEvents {
     diagnostics: [],
     malformed: 0,
     unknownEvents: 0,
+    unrecognizedTypes: 0,
+    unrecognizedVersions: 0,
   };
   const started = new Map<string, PlanAction>();
   let open: PlanDiagnostic | undefined;
@@ -317,6 +319,8 @@ export function renderDiagnosis(
   if (events.skippedWrapperOutput) report.skipped_text_lines = events.skippedWrapperOutput;
   if (events.malformed) report.malformed_lines = events.malformed;
   if (events.unknownEvents) report.unknown_events = events.unknownEvents;
+  if (events.unrecognizedTypes) report.unrecognized_types = events.unrecognizedTypes;
+  if (events.unrecognizedVersions) report.unrecognized_versions = events.unrecognizedVersions;
 
   const help: string[] = [];
   if (!options.full && (rows.length > MAX_ROWS || changes.length > MAX_ROWS))

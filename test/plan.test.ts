@@ -10,7 +10,7 @@ const byAddress = (events: PlanEvents) =>
     events.changes.map(({ address, action, reason }) => [address, reason ? `${action} ${reason}` : action]),
   );
 const planned = (change: object) => parsePlanEvents(JSON.stringify({ type: "planned_change", change }));
-const resource = { addr: "x.y", resource_type: "x" };
+const resource = { addr: "x.y", resource_type: "terraform_data" };
 
 describe.each([
   ["terraform", "1.15.8"],
@@ -133,7 +133,7 @@ describe("action decoding", () => {
     [{ actions: ["read"] }, "read"],
     [{ actions: ["forget"] }, "forget"],
   ])("decodes %j as %s", (shape, action) => {
-    expect(planned({ resource, ...shape }).changes).toEqual([{ address: "x.y", type: "x", action }]);
+    expect(planned({ resource, ...shape }).changes).toEqual([{ address: "x.y", type: "terraform_data", action }]);
   });
 
   it.each([{ action: "noop" }, { action: "no-op" }, { actions: ["no-op"] }])("drops no-op change %j", (shape) => {
@@ -158,7 +158,7 @@ describe("action decoding", () => {
         JSON.stringify({ type: "outputs", outputs: { token: { sensitive: true, ...shape } } }),
       ].join("\n"),
     );
-    expect(events.changes).toEqual([{ address: "x.y", type: "x", action: "unknown", raw }]);
+    expect(events.changes).toEqual([{ address: "x.y", type: "terraform_data", action: "unknown", raw }]);
     expect(events.drift).toEqual(events.changes);
     expect(events.outputs).toEqual([{ name: "token", action: "unknown", sensitive: true, raw }]);
     expect(classifyRisks(events).map((row) => row.flags)).toEqual([["unknown"], ["secret"]]);
@@ -195,7 +195,9 @@ describe("action decoding", () => {
     { actions: ["provider-action", "create", "delete"], raw: '["provider-action","create","delete"]' },
   ])("keeps replacement with extra action values %j", ({ actions, raw }) => {
     const events = planned({ resource, actions, reason: "cannot_update" });
-    expect(events.changes).toEqual([{ address: "x.y", type: "x", action: "REPLACE", reason: "cannot_update", raw }]);
+    expect(events.changes).toEqual([
+      { address: "x.y", type: "terraform_data", action: "REPLACE", reason: "cannot_update", raw },
+    ]);
     expect(classifyRisks(events)[0]?.flags).toEqual(["destroy", "replace(cannot_update)"]);
   });
 
@@ -207,7 +209,9 @@ describe("action decoding", () => {
     { actions: ["create", "delete"], action_reason: "cannot_update" },
   ])("reads the replace reason from %j", (shape) => {
     const events = planned({ resource, ...shape });
-    expect(events.changes).toEqual([{ address: "x.y", type: "x", action: "REPLACE", reason: "cannot_update" }]);
+    expect(events.changes).toEqual([
+      { address: "x.y", type: "terraform_data", action: "REPLACE", reason: "cannot_update" },
+    ]);
     expect(classifyRisks(events)[0]?.flags).toEqual(["destroy", "replace(cannot_update)"]);
   });
 });

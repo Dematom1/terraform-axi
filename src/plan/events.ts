@@ -9,7 +9,14 @@
 /** Display action. `unknown` is any action value this decoder does not recognize; its raw value is kept. */
 export type PlanAction =
   "create" | "update" | "REPLACE" | "DESTROY" | "read" | "move" | "import" | "forget" | "unknown";
-export type PlanChange = { address: string; action: PlanAction; type?: string; reason?: string; raw?: string };
+export type PlanChange = {
+  address: string;
+  action: PlanAction;
+  type?: string;
+  riskType?: string;
+  reason?: string;
+  raw?: string;
+};
 export type PlanOutput = { name: string; action: PlanAction | "noop"; sensitive: boolean; raw?: string };
 export type PlanSummary = { add: number; change: number; destroy: number; import?: number; forget?: number };
 export type PlanDiagnostic = { severity: string; summary: string; detail?: string; address?: string };
@@ -40,6 +47,8 @@ export type PlanEvents = {
   skippedWrapperOutput?: number;
   /** Well-formed events of a type this decoder does not know. */
   unknownEvents: number;
+  unrecognizedTypes: number;
+  unrecognizedVersions: number;
 };
 
 type Decoded = { action: PlanAction | "noop"; raw?: string };
@@ -99,7 +108,10 @@ function decodeChange(event: Json): PlanChange | undefined {
   if (action === "noop") return undefined;
   const row: PlanChange = { address, action };
   const type = str(resource.resource_type);
-  if (type) row.type = type;
+  if (type) {
+    row.type = metadataType(type);
+    Object.defineProperty(row, "riskType", { value: type });
+  }
   const reason = str(change.reason) ?? str(change.action_reason);
   if (reason) row.reason = reason;
   if (raw !== undefined) row.raw = raw;
@@ -140,6 +152,33 @@ const REASON_CODES = new Set([
 
 /** Unknown reason/action text and for_each keys can contain provider-sensitive values. */
 export const reasonCode = (reason: string | undefined) => (reason && REASON_CODES.has(reason) ? reason : "unknown");
+const RESOURCE_TYPES = new Set([
+  "terraform_data",
+  "terraform_remote_state",
+  "local_file",
+  "aws_s3_bucket",
+  "aws_instance",
+  "aws_iam_policy_document",
+  "aws_iam_policy",
+  "aws_iam_role",
+  "aws_iam_access_key",
+  "aws_secretsmanager_secret_version",
+  "vault_generic_secret",
+  "github_actions_organization_secret",
+  "github_actions_runner_group",
+  "azurerm_sentinel_data_connector_microsoft_defender_advanced_threat_protection",
+]);
+export function metadataType(type: string): string {
+  return RESOURCE_TYPES.has(type) ? type : "unrecognized";
+}
+
+export function safeVersion(version: string | undefined): string | undefined {
+  return version &&
+    /^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})(-(alpha|beta|rc)[0-9]{0,2})?$/.test(version)
+    ? version
+    : undefined;
+}
+
 export function metadataAddress(address: string): string {
   const masked = address.replace(/\["(?:[^"\\]|\\.)*"\]/g, '["withheld"]').replace(/\[(\d{5,})\]/g, '["withheld"]');
   return /^(?:[\w-]+(?:\[(?:\d+|"withheld")\])?)(?:\.[\w-]+(?:\[(?:\d+|"withheld")\])?)*$/.test(masked)
@@ -163,6 +202,8 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
     diagnostics: [],
     malformed: 0,
     unknownEvents: 0,
+    unrecognizedTypes: 0,
+    unrecognizedVersions: 0,
   };
   for (const line of jsonl.split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -187,7 +228,12 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
         const version = tofu ?? terraform;
         if (Boolean(tofu) !== Boolean(terraform)) {
           result.flavor = tofu ? "tofu" : "terraform";
-          if (version && /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,32})?$/.test(version)) result.version = version;
+          const safe = safeVersion(version);
+          if (safe) result.version = safe;
+          else if (version) {
+            result.version = "unrecognized";
+            result.unrecognizedVersions++;
+          }
         }
         break;
       }
@@ -200,6 +246,8 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
           break;
         }
         const row = decodeChange(event);
+        const type = str(resource.resource_type);
+        if (type && !RESOURCE_TYPES.has(type)) result.unrecognizedTypes++;
         if (row) (event.type === "planned_change" ? result.changes : result.drift).push(row);
         break;
       }
@@ -223,7 +271,10 @@ export function parsePlanEvents(jsonl: string, wrapperOutput = false): PlanEvent
           outcome: event.type === "apply_errored" ? "errored" : "complete",
         };
         const type = str(resource.resource_type);
-        if (type) row.type = type;
+        if (type) {
+          row.type = metadataType(type);
+          if (!RESOURCE_TYPES.has(type)) result.unrecognizedTypes++;
+        }
         const provider = str(resource.implied_provider);
         if (provider) row.provider = provider;
         (result.applied ??= []).push(row);
