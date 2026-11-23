@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.7](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.6...terraform-axi-v0.1.7) (2026-11-23)
+
+
+### Features
+
+* add skill-first onboarding and adoption metrics ([#36](https://github.com/Dematom1/terraform-axi/issues/36)) ([645d30f](https://github.com/Dematom1/terraform-axi/commit/645d30f8d33f6400997c88b19ba8788d2353f607))
+
+
+### Bug Fixes
+
+* **plan:** sanitize resource type and version metadata ([#38](https://github.com/Dematom1/terraform-axi/issues/38)) ([d47d3f9](https://github.com/Dematom1/terraform-axi/commit/d47d3f95ad0bd55e14b8885e3a788e8ef7ec7a8b))
+
 ## [0.1.6](https://github.com/Dematom1/terraform-axi/compare/terraform-axi-v0.1.5...terraform-axi-v0.1.6) (2026-11-11)
 
 
