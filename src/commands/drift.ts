@@ -4,11 +4,11 @@ import type { Config } from "../config.js";
 import { ReportError, UsageError } from "../errors.js";
 import { PLAN_ARGS } from "../plan/command.js";
 import { diagnosticMetadata, metadataAddress, parsePlanEvents, type PlanChange } from "../plan/events.js";
-import { run, wrapperArgs } from "../runner.js";
+import { run, wrapperArgs, RUNNER_OPTIONS, selectRunConfig } from "../runner.js";
 
 /** The plan argv plus `-refresh-only`: compares state with real infrastructure, never with configuration. */
 export const DRIFT_ARGS = [...PLAN_ARGS, "-refresh-only"];
-export const driftUsage = "terraform-axi drift <module> [--binary terraform|tofu] [--full]";
+export const driftUsage = "terraform-axi drift <module> [--binary terraform|tofu|--wrapper command] [--full]";
 const MAX_ROWS = 20;
 const TIMEOUT_MS = 600_000;
 
@@ -21,21 +21,19 @@ const driftAction = (row: PlanChange) => DRIFT_ACTION[row.action] ?? row.action;
  * `change_summary` stays 0/0/0 for a refresh-only plan even when resources drifted.
  */
 export async function drift(args: string[], config: Config): Promise<Record<string, unknown>> {
-  const parsed = parseArgs(args, [
-    { name: "--binary", values: ["terraform", "tofu"] },
-    { name: "--full", boolean: true },
-  ]);
+  const parsed = parseArgs(args, [...RUNNER_OPTIONS, { name: "--full", boolean: true }]);
   const full = parsed.values["--full"] !== undefined;
   const module = parsed.command;
   if (module === undefined || parsed.positional.length)
     throw new UsageError(`expected exactly one module; usage: ${driftUsage}`);
-  const binary = parsed.values["--binary"]?.[0] as "terraform" | "tofu" | undefined;
-  // `--binary` runs that executable directly, bypassing any configured wrapper, as `plan` does.
-  const runConfig: Config = binary ? { binary, modules: config.modules } : config;
+  const binary = parsed.values["--binary"]?.[0];
+  const wrapper = parsed.values["--wrapper"]?.[0];
+  const runConfig = selectRunConfig(config, parsed.values);
   const invocation = commandLine([
     "drift",
     module,
     ...(binary ? ["--binary", binary] : []),
+    ...(wrapper ? ["--wrapper", wrapper] : []),
     ...(full ? ["--full"] : []),
   ]);
   const result = await run(runConfig, module, TIMEOUT_MS, {
@@ -82,7 +80,7 @@ export async function drift(args: string[], config: Config): Promise<Record<stri
   }
   report.help = [
     ...(truncated ? [`Run \`${invocation} --full\` to list all ${rows.length} drifted resources`] : []),
-    `Run \`${commandLine(["plan", module, ...(binary ? ["--binary", binary] : [])])}\` to see planned configuration changes`,
+    `Run \`${commandLine(["plan", module, ...(binary ? ["--binary", binary] : wrapper ? ["--wrapper", wrapper] : [])])}\` to see planned configuration changes`,
     ...(rows.length ? ["A human may accept the drift into state with the human_only command; never run it"] : []),
   ];
   return report;

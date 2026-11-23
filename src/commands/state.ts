@@ -2,7 +2,7 @@ import { encode } from "@toon-format/toon";
 import { commandLine, parseArgs } from "../args.js";
 import type { Config } from "../config.js";
 import { UsageError } from "../errors.js";
-import { runOperation } from "../runner.js";
+import { runOperation, RUNNER_OPTIONS, selectRunConfig } from "../runner.js";
 import { parseState } from "../state/model.js";
 import { redactState } from "../state/redact.js";
 
@@ -63,17 +63,27 @@ function cut(value: unknown): unknown {
 }
 
 export async function stateCommand(config: Config, argv: string[]): Promise<string> {
-  const { command, positional, values } = parseArgs(argv, [{ name: "--full", boolean: true }]);
+  const { command, positional, values } = parseArgs(argv, [...RUNNER_OPTIONS, { name: "--full", boolean: true }]);
   const full = values["--full"] !== undefined;
+  const binary = values["--binary"]?.[0];
+  const wrapper = values["--wrapper"]?.[0];
+  const runnerFlags = binary ? ["--binary", binary] : wrapper ? ["--wrapper", wrapper] : [];
+  const runConfig = selectRunConfig(config, values);
   if (command === "list") {
-    if (positional.length !== 1) throw new UsageError("usage: terraform-axi state list <module> [--full]");
+    if (positional.length !== 1)
+      throw new UsageError(
+        "usage: terraform-axi state list <module> [--full] [--binary terraform|tofu|--wrapper command]",
+      );
     const module = positional[0]!;
-    const addresses = (await runOperation(config, module, "state_list")).stdout.trim().split(/\r?\n/).filter(Boolean);
+    const addresses = (await runOperation(runConfig, module, "state_list")).stdout
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean);
     if (!addresses.length) return encode({ status: "empty_state", total: 0, resources: [] });
     let types = new Map<string, string>();
     if (full)
       types = new Map(
-        parse((await runOperation(config, module, "show_state")).stdout).resources.map((r) => [r.address, r.type]),
+        parse((await runOperation(runConfig, module, "show_state")).stdout).resources.map((r) => [r.address, r.type]),
       );
     return encode({
       resources: addresses
@@ -81,19 +91,23 @@ export async function stateCommand(config: Config, argv: string[]): Promise<stri
         .map((address) => ({ address, type: types.get(address) ?? resourceType(address) })),
       total: addresses.length,
       help: [
-        `Run \`${commandLine(["state", "resource", module, "<address>"])}\` to inspect a resource`,
+        `Run \`${commandLine(["state", "resource", module, "<address>", ...runnerFlags])}\` to inspect a resource`,
         ...(!full && addresses.length > 100
-          ? [`Run \`${commandLine(["state", "list", module, "--full"])}\` to list all ${addresses.length} resources`]
+          ? [
+              `Run \`${commandLine(["state", "list", module, "--full", ...runnerFlags])}\` to list all ${addresses.length} resources`,
+            ]
           : []),
       ],
     });
   }
   if (command === "resource") {
     if (positional.length !== 2)
-      throw new UsageError("usage: terraform-axi state resource <module> <address> [--full]");
+      throw new UsageError(
+        "usage: terraform-axi state resource <module> <address> [--full] [--binary terraform|tofu|--wrapper command]",
+      );
     const module = positional[0]!;
     const address = positional[1]!;
-    const model = parse((await runOperation(config, module, "show_state")).stdout);
+    const model = parse((await runOperation(runConfig, module, "show_state")).stdout);
     const redacted = redactState(model);
     const resource = redacted.resources.find((item) => item.address === address);
     if (!resource) {
@@ -104,7 +118,9 @@ export async function stateCommand(config: Config, argv: string[]): Promise<stri
       return encode({
         status: model.resources.length ? "not_found" : "empty_state",
         ...(model.resources.length ? { address, closest } : {}),
-        help: [`Run \`${commandLine(["state", "list", module, "--full"])}\` to find an exact resource address`],
+        help: [
+          `Run \`${commandLine(["state", "list", module, "--full", ...runnerFlags])}\` to find an exact resource address`,
+        ],
       });
     }
     const attributes = full ? resource.attributes : cut(resource.attributes);
@@ -116,11 +132,13 @@ export async function stateCommand(config: Config, argv: string[]): Promise<stri
       ...(truncated
         ? {
             help: [
-              `Run \`${commandLine(["state", "resource", module, address, "--full"])}\` to see complete attributes (secrets remain redacted)`,
+              `Run \`${commandLine(["state", "resource", module, address, "--full", ...runnerFlags])}\` to see complete attributes (secrets remain redacted)`,
             ],
           }
         : {}),
     });
   }
-  throw new UsageError("usage: terraform-axi state list <module> | state resource <module> <address>");
+  throw new UsageError(
+    "usage: terraform-axi state list <module> [--full] [--binary terraform|tofu|--wrapper command] | state resource <module> <address> [--full] [--binary terraform|tofu|--wrapper command]",
+  );
 }

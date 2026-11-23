@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
   cpSync,
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -116,6 +117,33 @@ it("2/5: state --full retrieves every row and complete attributes, with sizes an
   expect(full.attributes.id).toHaveLength(500);
   expect(full.help).toBeUndefined();
 });
+it("preserves --binary in state follow-up commands through the built CLI", () => {
+  const module = join(home, "module");
+  const bin = join(home, "bin");
+  mkdirSync(module);
+  mkdirSync(bin);
+  const marker = join(home, "wrapper-called");
+  const wrapper = join(home, "wrapper.mjs");
+  writeFileSync(
+    wrapper,
+    `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(marker)}, "called");`,
+  );
+  const tofu = join(bin, "tofu");
+  writeFileSync(
+    tofu,
+    `#!/usr/bin/env node\nprocess.stdout.write(Array.from({length: 101}, (_, i) => 'test_resource.item' + i).join('\\n'));\n`,
+  );
+  chmodSync(tofu, 0o700);
+  env.PATH = `${bin}:${env.PATH}`;
+  expect(cli(["setup", "--wrapper", `${process.execPath} ${wrapper} {module}`]).status).toBe(0);
+
+  const result = cli(["state", "list", module, "--binary", "tofu"]);
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain(`state resource ${module} '<address>' --binary tofu`);
+  expect(result.stdout).toContain(`state list ${module} --full --binary tofu`);
+  expect(existsSync(marker)).toBe(false);
+});
+
 it.each([
   ["doctor", "--bogus", "--offline"],
   ["doctor", "one", "two", "--offline"],

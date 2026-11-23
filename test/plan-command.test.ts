@@ -334,6 +334,31 @@ describe("plan <module> through the configured runner", () => {
       "Check the selected plan input and diagnostics, then rerun `terraform-axi plan --expect add=0 infra/prod` before trusting these rows",
     ]);
   });
+  it("uses a per-invocation wrapper without changing config and rejects invalid selectors", () => {
+    const marker = join(home, "override-called");
+    const override = join(home, "override.mjs");
+    writeFileSync(
+      override,
+      `import { appendFileSync, readFileSync } from "node:fs"; appendFileSync(${JSON.stringify(marker)}, "called"); process.stdout.write(readFileSync(process.env.TF_AXI_FIXTURE, "utf8"));`,
+    );
+    const command = `${process.execPath} ${override} {module}`;
+    const result = tfaxi(["plan", "infra/prod", "--wrapper", command], {
+      TF_AXI_FIXTURE: planFixture("terraform-1.15.8-no-change.jsonl"),
+    });
+    expect(result.status).toBe(0);
+    expect(result.report.via).toBe("wrapper");
+    expect(existsSync(marker)).toBe(true);
+    expect(existsSync(join(home, ".config"))).toBe(false);
+    for (const args of [
+      ["plan", "infra/prod", "--wrapper", "x;y {module}"],
+      ["plan", "infra/prod", "--wrapper", "cmd"],
+      ["plan", "infra/prod", "--wrapper", "{module} x"],
+      ["plan", "infra/prod", "--wrapper", command, "--binary", "terraform"],
+      ["plan", "--plan-json", planFixture("terraform-1.15.8-no-change.jsonl"), "--wrapper", command],
+    ])
+      expect(tfaxi(args).status).toBe(2);
+  });
+
   it("runs the exact read-only plan argv, treats exit 2 as changes present, and strips TF_CLI_ARGS", () => {
     const log = withFakeWrapper();
     const { status, report } = tfaxi(["plan", "infra/prod", "--expect", "add=4,change=2,destroy=4"], {
