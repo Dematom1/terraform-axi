@@ -105,6 +105,137 @@ describe.each(["terraform-1.15.8", "tofu-1.13.1"])("drift on captured %s streams
   });
 });
 
+describe("offline drift", () => {
+  it.each(["terraform-1.15.8", "tofu-1.13.1"])("matches live drift from the captured %s stream", (prefix) => {
+    withWrapper();
+    const file = fixture(`${prefix}-drift`);
+    const live = drift(["m"], { TF_AXI_FIXTURE: file });
+    rmSync(callLog);
+    const { status, output } = drift(["--plan-json", file]);
+    expect(status).toBe(0);
+    expect(output).toMatchObject({
+      plan_json: file,
+      status: live.output.status,
+      drifted: live.output.drifted,
+      drift: live.output.drift,
+    });
+    expect(output).not.toHaveProperty("human_only");
+    expect(output).not.toHaveProperty("module");
+    expect(output).not.toHaveProperty("via");
+    expect(output.help).toEqual([
+      `Run \`terraform-axi plan --plan-json ${file}\` to see planned configuration changes`,
+    ]);
+    expect(() => readFileSync(callLog)).toThrow();
+  });
+
+  it("reads resource_drift from a show -json plan document", () => {
+    const file = join(home, "show.json");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        terraform_version: "1.15.8",
+        planned_values: {},
+        resource_drift: [{ address: "local_file.drifted", type: "local_file", change: { actions: ["delete"] } }],
+      }),
+    );
+    const { status, output } = drift(["--plan-json", file]);
+    expect(status).toBe(0);
+    expect(output).toMatchObject({
+      status: "drift detected",
+      drifted: 1,
+      drift: [{ action: "delete", address: "local_file.drifted" }],
+    });
+    expect(output).not.toHaveProperty("human_only");
+  });
+
+  it.each(["terraform-1.15.8", "tofu-1.13.1"])("fails closed on truncated %s input", (prefix) => {
+    const { status, output } = drift(["--plan-json", fixture(`${prefix}-truncated`)]);
+    expect(status).toBe(1);
+    expect(output.status).toBe("incomplete");
+    expect(output).not.toHaveProperty("drifted");
+  });
+
+  it("rejects wrapper progress in files even with a configured wrapper", () => {
+    withWrapper();
+    const file = join(home, "progress.jsonl");
+    writeFileSync(file, `Running terraform init...\n${readFileSync(fixture("terraform-1.15.8-drift"), "utf8")}`);
+    const { status, output } = drift(["--plan-json", file]);
+    expect(status).toBe(1);
+    expect(output).toMatchObject({ status: "incomplete", malformed_lines: 1 });
+    expect(output).not.toHaveProperty("skipped_wrapper_lines");
+    expect(output).not.toHaveProperty("drifted");
+    expect(() => readFileSync(callLog)).toThrow();
+  });
+
+  it("withholds diagnostic text in file input even with --full", () => {
+    const file = join(home, "error.jsonl");
+    const sentinel = "OFFLINE_DIAGNOSTIC_SECRET";
+    writeFileSync(
+      file,
+      JSON.stringify({
+        type: "diagnostic",
+        diagnostic: {
+          severity: "error",
+          summary: sentinel,
+          detail: sentinel,
+          address: sentinel,
+        },
+      }),
+    );
+    const { status, output, stdout } = drift(["--plan-json", file, "--full"]);
+    expect(status).toBe(1);
+    expect(output).toMatchObject({
+      status: "error",
+      diagnostics: [{ severity: "error", category: "terraform_diagnostic" }],
+    });
+    expect(stdout).not.toContain(sentinel);
+    expect(String(output.help)).toContain(`--plan-json ${file} --full`);
+  });
+
+  it("reports an unreadable file as an operational error", () => {
+    const { status, output } = drift(["--plan-json", join(home, "missing.jsonl")]);
+    expect(status).toBe(1);
+    expect(String(output.error)).toContain("cannot read plan file");
+  });
+
+  it.each([
+    ["m", "--plan-json", "f"],
+    ["--plan-json", "f", "--binary", "tofu"],
+    ["--plan-json", "f", "--wrapper", `${process.execPath} ${fake} {module}`],
+  ])("rejects incompatible selectors %j before spawning", (...args) => {
+    withWrapper();
+    expect(drift(args).status).toBe(2);
+    expect(() => readFileSync(callLog)).toThrow();
+  });
+
+  it("preserves a quoted file path in --full recovery and plan hints", () => {
+    const file = join(home, "many rows.jsonl");
+    const events = Array.from({ length: 21 }, (_, i) =>
+      JSON.stringify({
+        type: "resource_drift",
+        change: { resource: { addr: `local_file.f${i}` }, action: "update" },
+      }),
+    );
+    writeFileSync(
+      file,
+      [...events, JSON.stringify({ type: "change_summary", changes: { add: 0, change: 0, remove: 0 } })].join("\n"),
+    );
+    const { status, output } = drift(["--plan-json", file]);
+    expect(status).toBe(0);
+    expect(output.drifted).toBe(21);
+    expect(output.drift).toHaveLength(20);
+    expect(output).not.toHaveProperty("human_only");
+    expect(output.help).toEqual([
+      `Run \`terraform-axi drift --plan-json '${file}' --full\` to list all 21 drifted resources`,
+      `Run \`terraform-axi plan --plan-json '${file}'\` to see planned configuration changes`,
+    ]);
+    const full = drift(["--plan-json", file, "--full"]);
+    expect(full.status).toBe(0);
+    expect(full.output.drift).toHaveLength(21);
+    expect(full.output).not.toHaveProperty("truncated");
+  });
+});
+
 describe("drift invocation", () => {
   it("runs a refresh-only, lock-free plan that never refreshes state or writes a plan file", () => {
     withWrapper();
